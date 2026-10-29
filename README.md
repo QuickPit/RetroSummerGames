@@ -6,7 +6,7 @@ diesmal per Tastatur.
 
 **Spielen:** https://quickpit.github.io/RetroSummerGames/
 
-## Aktueller Stand (v0.1 – Solo-Prototyp)
+## Aktueller Stand (v0.2 – Solo-Prototyp)
 
 Disziplin **110 m Hürden** gegen drei Computer-Gegner (Rookie, Profi, Champion).
 
@@ -14,6 +14,7 @@ Disziplin **110 m Hürden** gegen drei Computer-Gegner (Rookie, Profi, Champion)
 | --- | --- |
 | ← / → (oder A / D) | **abwechselnd** tippen = laufen – zweimal dieselbe Taste zählt nicht |
 | Leertaste | über die Hürde springen |
+| ↑ / ↓ (im Menü) | Aussehen des eigenen Athleten wählen |
 | Enter | Start bestätigen / Ergebnis anzeigen / nochmal |
 | R | Rennen neu starten |
 | M | Ton an/aus |
@@ -21,7 +22,8 @@ Disziplin **110 m Hürden** gegen drei Computer-Gegner (Rookie, Profi, Champion)
 
 - Startsequenz „Auf die Plätze – Fertig – Schuss“ mit zufälliger Wartezeit; wer zu früh tippt, verursacht einen Fehlstart.
 - Ideal ist der Absprung so, dass der höchste Punkt des Sprungs über der Hürde liegt. Wer eine Hürde reißt, verliert viel Tempo und stolpert.
-- Ergebnis mit Siegerpodest, Reaktionszeit und gespeicherter persönlicher Bestzeit (Weltrekord: 12,80 s).
+- Ergebnis mit Siegerpodest, Medaillen, Reaktionszeit und gespeicherter persönlicher Bestzeit (Weltrekord: 12,80 s).
+- Liebevoll animierte Athleten: verschiedene Frisuren, 80er-Stirnbänder, Mimik (konzentriert, angestrengt, „Autsch“, Jubel, erschöpft), Wippen vor dem Start, Jubeln oder Verschnaufen im Ziel.
 
 ## Entwicklung
 

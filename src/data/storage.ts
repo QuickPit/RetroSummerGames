@@ -45,3 +45,13 @@ export function loadCountryIndex(): number {
 export function saveCountryIndex(index: number): void {
   write('rsg.country', String(index));
 }
+
+/** Startwert für das Aussehen des eigenen Athleten */
+export function loadLookSeed(): number {
+  const n = Number(read('rsg.look'));
+  return Number.isInteger(n) && n > 0 ? n : 1;
+}
+
+export function saveLookSeed(seed: number): void {
+  write('rsg.look', String(seed));
+}

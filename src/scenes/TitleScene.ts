@@ -2,8 +2,9 @@ import Phaser from 'phaser';
 import { sfx } from '../audio/sfx';
 import { COLORS, FONT, GAME_WIDTH } from '../config';
 import { COUNTRIES } from '../data/countries';
-import { loadBest, loadCountryIndex, saveCountryIndex } from '../data/storage';
+import { loadBest, loadCountryIndex, loadLookSeed, saveCountryIndex, saveLookSeed } from '../data/storage';
 import { drawFlag } from '../gfx/flags';
+import { createLook, drawRunner, drawShadow, idlePose, type RunnerLook } from '../gfx/runner';
 import { Stadium } from '../gfx/stadium';
 
 const STRIPES = [0xf7d038, 0xf08a24, 0xe8442e, 0xc42f6e, 0x7a3fc4];
@@ -13,6 +14,9 @@ export class TitleScene extends Phaser.Scene {
   private countryIndex = 0;
   private nationGfx!: Phaser.GameObjects.Graphics;
   private nationText!: Phaser.GameObjects.Text;
+  private previewGfx!: Phaser.GameObjects.Graphics;
+  private lookSeed = 1;
+  private look!: RunnerLook;
   private camPx = 0;
   private elapsed = 0;
 
@@ -22,6 +26,7 @@ export class TitleScene extends Phaser.Scene {
 
   create(): void {
     this.countryIndex = loadCountryIndex() % COUNTRIES.length;
+    this.lookSeed = loadLookSeed();
     this.stadium = new Stadium(this);
     this.add.rectangle(0, 0, GAME_WIDTH, 360, 0x10101c, 0.6).setOrigin(0);
 
@@ -42,7 +47,12 @@ export class TitleScene extends Phaser.Scene {
     grd.addColorStop(0.8, '#f08a24');
     logo.setFill(grd);
 
-    // Auswahl
+    // Auswahl auf eigenem Panel, damit sie vor den Werbebanden lesbar bleibt
+    const panel = this.add.graphics();
+    panel.fillStyle(0x10101c, 0.8);
+    panel.fillRect(150, 116, GAME_WIDTH - 300, 94);
+    panel.lineStyle(1, COLORS.yellow, 1);
+    panel.strokeRect(150.5, 116.5, GAME_WIDTH - 301, 93);
     text(GAME_WIDTH / 2, 124, 'DISZIPLIN', 8, '#9aa0b8');
     text(GAME_WIDTH / 2, 138, '110 M HÜRDEN', 16, '#ffffff');
     text(GAME_WIDTH / 2, 170, 'NATION', 8, '#9aa0b8');
@@ -61,7 +71,7 @@ export class TitleScene extends Phaser.Scene {
       this.add.text(left + 150, y, what, { fontFamily: FONT, fontSize: '8px', color: '#ffffff' });
     };
     helpText(230, 'PFEIL LINKS/RECHTS', 'ABWECHSELND TIPPEN = LAUFEN');
-    helpText(244, '(ODER A / D)', 'JE SCHNELLER, DESTO BESSER');
+    helpText(244, 'PFEIL HOCH/RUNTER', 'AUSSEHEN DEINES ATHLETEN');
     helpText(258, 'LEERTASTE', 'ÜBER DIE HÜRDE SPRINGEN');
     helpText(272, 'M / ESC', 'TON AN/AUS / ZURÜCK ZUM MENÜ');
 
@@ -71,9 +81,11 @@ export class TitleScene extends Phaser.Scene {
     const prompt = text(GAME_WIDTH / 2, 318, 'ENTER = START', 16, '#ffffff').setStroke('#10101c', 4);
     this.tweens.add({ targets: prompt, alpha: 0.25, duration: 550, yoyo: true, repeat: -1 });
     this.add
-      .text(GAME_WIDTH - 6, 350, 'v0.1 SOLO', { fontFamily: FONT, fontSize: '8px', color: '#5d6278' })
+      .text(GAME_WIDTH - 6, 350, 'v0.2 SOLO', { fontFamily: FONT, fontSize: '8px', color: '#5d6278' })
       .setOrigin(1, 0);
 
+    // Der eigene Athlet wippt neben der Steuerungshilfe
+    this.previewGfx = this.add.graphics();
     this.drawNation();
 
     const kb = this.input.keyboard!;
@@ -82,10 +94,13 @@ export class TitleScene extends Phaser.Scene {
       sfx.unlock();
       if (ev.code === 'ArrowLeft' || ev.code === 'KeyA') this.changeCountry(-1);
       else if (ev.code === 'ArrowRight' || ev.code === 'KeyD') this.changeCountry(1);
+      else if (ev.code === 'ArrowUp' || ev.code === 'KeyW') this.changeLook(1);
+      else if (ev.code === 'ArrowDown' || ev.code === 'KeyS') this.changeLook(-1);
       else if (ev.code === 'KeyM') sfx.toggleMute();
       else if (!ev.repeat && (ev.code === 'Enter' || ev.code === 'NumpadEnter' || ev.code === 'Space')) {
         sfx.confirm();
         saveCountryIndex(this.countryIndex);
+        saveLookSeed(this.lookSeed);
         this.scene.start('race', { countryIndex: this.countryIndex });
       }
     };
@@ -99,8 +114,15 @@ export class TitleScene extends Phaser.Scene {
     this.drawNation();
   }
 
+  private changeLook(delta: number): void {
+    this.lookSeed = Math.max(1, this.lookSeed + delta);
+    sfx.menu();
+    this.drawNation();
+  }
+
   private drawNation(): void {
     const country = COUNTRIES[this.countryIndex];
+    this.look = createLook(country, this.lookSeed, 1);
     this.nationText.setText(country.name);
     const flagW = 24;
     const total = flagW + 10 + this.nationText.width;
@@ -122,5 +144,10 @@ export class TitleScene extends Phaser.Scene {
     this.elapsed += dt;
     this.camPx += dt * 40;
     this.stadium.update(this.camPx, dt, this.elapsed, 0.2);
+
+    const g = this.previewGfx;
+    g.clear();
+    drawShadow(g, 58, 282, 0);
+    drawRunner(g, 58, 282, idlePose(this.elapsed, this.look.seed), this.look, { time: this.elapsed });
   }
 }

@@ -4,7 +4,7 @@ import { COLORS, FONT, GAME_WIDTH, WORLD_RECORD } from '../config';
 import type { Country } from '../data/countries';
 import { loadBest, saveBest } from '../data/storage';
 import { drawFlag } from '../gfx/flags';
-import { cheerPose, drawRunner, standPose, type RunnerLook } from '../gfx/runner';
+import { cheerPose, drawRunner, wavePose, type RunnerLook } from '../gfx/runner';
 import { Stadium } from '../gfx/stadium';
 
 export interface RaceResult {
@@ -26,12 +26,12 @@ interface ResultSceneData {
 
 const EVENT_KEY = '110h';
 const MEDALS = [COLORS.gold, COLORS.silver, COLORS.bronze];
-const PODIUM_BASE_Y = 160;
+const PODIUM_BASE_Y = 166;
 /** [Platzierung, Mitte X, Höhe] – Silber links, Gold Mitte, Bronze rechts */
 const PODIUM: [number, number, number][] = [
-  [1, GAME_WIDTH / 2 - 70, 34],
-  [0, GAME_WIDTH / 2, 50],
-  [2, GAME_WIDTH / 2 + 70, 24],
+  [1, GAME_WIDTH / 2 - 70, 30],
+  [0, GAME_WIDTH / 2, 42],
+  [2, GAME_WIDTH / 2 + 70, 22],
 ];
 
 export class ResultScene extends Phaser.Scene {
@@ -80,11 +80,11 @@ export class ResultScene extends Phaser.Scene {
       g.fillStyle(0xb8bcd0, 1);
       g.fillRect(cx - 30, PODIUM_BASE_Y - 3, 60, 3);
       text(cx, PODIUM_BASE_Y - h + 6, String(rank + 1), 16, '#10101c').setOrigin(0.5, 0);
-      drawFlag(g, r.country.flag, cx + 12, PODIUM_BASE_Y - h - 22, 16, 11);
+      drawFlag(g, r.country.flag, cx + 14, PODIUM_BASE_Y - h - 24, 16, 11);
     }
 
     // Tabelle
-    const tableY = 176;
+    const tableY = 178;
     const cols = { place: 70, flag: 104, nation: 130, time: 320, hits: 400, reaction: 480 };
     const header = '#9aa0b8';
     text(cols.place, tableY, 'PL', 8, header);
@@ -122,7 +122,7 @@ export class ResultScene extends Phaser.Scene {
     const player = this.ranked.find((r) => r.isPlayer)!;
     const place = this.ranked.indexOf(player) + 1;
     const previous = loadBest(EVENT_KEY);
-    const footerY = 270;
+    const footerY = 274;
     let line = '';
     let lineColor = '#ffffff';
     if (player.time !== null) {
@@ -176,8 +176,15 @@ export class ResultScene extends Phaser.Scene {
     for (const [rank, cx, h] of PODIUM) {
       const r = this.ranked[rank];
       if (!r || r.time === null) continue;
-      const pose = rank === 0 ? cheerPose(this.elapsed) : standPose();
-      drawRunner(g, cx - 6, PODIUM_BASE_Y - h, pose, r.look);
+      const t = this.elapsed + rank * 0.7;
+      const pose = rank === 0 ? cheerPose(t) : wavePose(t);
+      const bounce = rank === 0 ? Math.abs(Math.sin(t * 6)) * 4 : 0;
+      drawRunner(g, cx - 6, PODIUM_BASE_Y - h, pose, r.look, {
+        lift: bounce,
+        mood: 'joy',
+        time: t,
+        medal: MEDALS[rank],
+      });
     }
   }
 }

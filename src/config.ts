@@ -6,18 +6,18 @@ export const GAME_HEIGHT = 360;
 export const FONT = '"Press Start 2P", monospace';
 
 /** Pixel pro Meter in der Spielwelt */
-export const PX_PER_M = 20;
+export const PX_PER_M = 26;
 
 export const LANE_COUNT = 4;
 /** Bildschirmhöhe einer Bahn in Pixeln */
-export const LANE_DEPTH = 26;
+export const LANE_DEPTH = 30;
 /** Unterkante der vordersten Bahn */
 export const TRACK_NEAR_Y = 318;
 export const TRACK_FAR_Y = TRACK_NEAR_Y - LANE_COUNT * LANE_DEPTH;
 /** Schräge Projektion: Verschiebung nach rechts pro Pixel Tiefe */
 export const DEPTH_SKEW = 0.35;
 /** Bildschirmposition des eigenen Läufers (Kamera folgt ihm) */
-export const CAMERA_LEAD_X = 190;
+export const CAMERA_LEAD_X = 170;
 
 export const COLORS = {
   outline: 0x10101c,

@@ -5,27 +5,30 @@ import {
   COLORS,
   FONT,
   GAME_WIDTH,
-  HAIR_COLORS,
   LANE_COUNT,
   LANE_DEPTH,
   PX_PER_M,
-  SKIN_TONES,
   TRACK_FAR_Y,
   TRACK_NEAR_Y,
   laneCenterY,
   skewAt,
 } from '../config';
 import { COUNTRIES, type Country } from '../data/countries';
+import { loadLookSeed } from '../data/storage';
 import { Hud } from '../gfx/hud';
 import {
   cheerPose,
+  createLook,
   crouchPose,
   drawRunner,
   drawShadow,
+  idlePose,
   jumpPose,
+  lerpPose,
   runPose,
-  standPose,
   stumblePose,
+  tiredPose,
+  type Mood,
   type Pose,
   type RunnerLook,
 } from '../gfx/runner';
@@ -54,7 +57,7 @@ const PLAYER_LANE = 2;
 /** Wie lange nach dem eigenen Zieleinlauf noch weitergelaufen wird */
 const AFTER_FINISH = 4;
 /** Hüfte steht in der Hocke hinter der Startlinie */
-const CROUCH_OFFSET_PX = 12;
+const CROUCH_OFFSET_PX = 15;
 
 type Phase = 'ready' | 'marks' | 'set' | 'falseStart' | 'race';
 
@@ -152,12 +155,8 @@ export class RaceScene extends Phaser.Scene {
       const isPlayer = lane === PLAYER_LANE;
       const country = isPlayer ? COUNTRIES[this.countryIndex] : others[cpuIndex];
       const state = createRunner();
-      const look: RunnerLook = {
-        jersey: country.jersey,
-        shorts: country.shorts,
-        skin: Phaser.Utils.Array.GetRandom([...SKIN_TONES]),
-        hair: Phaser.Utils.Array.GetRandom([...HAIR_COLORS]),
-      };
+      const seed = isPlayer ? loadLookSeed() : Math.floor(Math.random() * 1e9);
+      const look: RunnerLook = createLook(country, seed, lane + 1);
       const cpu = isPlayer
         ? null
         : new CpuController(state, profiles[cpuIndex++ % profiles.length], Math.random);
@@ -538,7 +537,7 @@ export class RaceScene extends Phaser.Scene {
 
       const post = (x: number, y: number) => {
         g.fillStyle(0x5d6278, 1);
-        g.fillRect(x - 10, y - 1, 11, 2);
+        g.fillRect(x - 13, y - 1, 14, 2);
         g.lineStyle(4, COLORS.outline, 1);
         g.lineBetween(x, y, x + dx, y + dy);
         g.lineStyle(2, 0xe0e0e0, 1);
@@ -571,26 +570,43 @@ export class RaceScene extends Phaser.Scene {
     });
   }
 
-  private poseFor(c: Competitor, raceTime: number): Pose {
+  /** Wählt Pose, Gesichtsausdruck und Sprunghöhe passend zur Rennsituation. */
+  private poseFor(c: Competitor, raceTime: number): { pose: Pose; mood: Mood; bounce: number } {
     const s = c.state;
+    const t = this.elapsed;
     if (this.phase !== 'race') {
-      if (this.crouch <= 0) return standPose();
-      if (this.crouch < 1) return lerpPose(standPose(), crouchPose(0), this.crouch);
-      return crouchPose(this.crouch - 1);
+      const idle = idlePose(t, c.look.seed);
+      if (this.crouch <= 0) return { pose: idle, mood: 'neutral', bounce: 0 };
+      if (this.crouch < 1) return { pose: lerpPose(idle, crouchPose(0), this.crouch), mood: 'neutral', bounce: 0 };
+      return { pose: crouchPose(this.crouch - 1), mood: 'neutral', bounce: 0 };
     }
+    // Bis zum ersten Tipp im Startblock bleiben
+    if (s.firstTapTime === null) return { pose: crouchPose(1), mood: 'neutral', bounce: 0 };
+
     if (isFinished(s) && s.v < 1.2) {
-      return c.place === 1 || (c.isPlayer && (c.place ?? 9) <= 3) ? cheerPose(this.elapsed) : standPose();
+      const medal = (c.place ?? 9) <= 3;
+      if (c.place === 1) return { pose: cheerPose(t), mood: 'joy', bounce: Math.abs(Math.sin(t * 6)) * 5 };
+      if (c.isPlayer && medal) return { pose: cheerPose(t), mood: 'joy', bounce: 0 };
+      return { pose: tiredPose(t + c.look.seed), mood: 'tired', bounce: 0 };
     }
-    if (isAirborne(s)) return jumpPose(s.air / PHYSICS.jumpDuration);
+    if (isAirborne(s)) return { pose: jumpPose(s.air / PHYSICS.jumpDuration), mood: 'effort', bounce: 0 };
+
     let pose: Pose;
-    if (s.stumble > 0) pose = stumblePose(s.stride, s.stumble / PHYSICS.stumbleDuration, this.elapsed);
-    else pose = runPose(s.stride, Math.min(1, s.v / 9));
-    if (isFinished(s)) pose = lerpPose(standPose(), pose, Math.min(1, s.v / 4));
-    // Bis zum ersten Tipp im Startblock bleiben, dann in den Laufschritt übergehen
-    if (s.firstTapTime === null) return crouchPose(1);
+    let mood: Mood = s.v > 6 ? 'effort' : 'neutral';
+    if (s.stumble > 0) {
+      pose = stumblePose(s.stride, s.stumble / PHYSICS.stumbleDuration, t);
+      mood = 'ouch';
+    } else {
+      pose = runPose(s.stride, Math.min(1, s.v / 9));
+    }
+    if (isFinished(s)) {
+      const settle = c.place === 1 || (c.isPlayer && (c.place ?? 9) <= 3) ? cheerPose(t) : tiredPose(t + c.look.seed);
+      pose = lerpPose(settle, pose, Math.min(1, s.v / 4));
+    }
+    // Aus dem Startblock heraus in den Laufschritt übergehen
     const sinceStart = raceTime - s.firstTapTime;
     if (sinceStart < 0.3) pose = lerpPose(crouchPose(1), pose, Math.max(0, sinceStart / 0.3));
-    return pose;
+    return { pose, mood, bounce: 0 };
   }
 
   private drawCompetitor(c: Competitor, raceTime: number, dt: number): void {
@@ -600,7 +616,7 @@ export class RaceScene extends Phaser.Scene {
     const y = laneCenterY(c.lane) + 4;
     const offset = s.firstTapTime === null ? CROUCH_OFFSET_PX : Math.max(0, 1 - (raceTime - s.firstTapTime) / 0.3) * CROUCH_OFFSET_PX;
     const x = this.screenX(s.x, y) - offset;
-    if (x < -40 || x > GAME_WIDTH + 40) {
+    if (x < -50 || x > GAME_WIDTH + 50) {
       c.dust.length = 0;
       return;
     }
@@ -618,31 +634,19 @@ export class RaceScene extends Phaser.Scene {
       g.fillRect(Math.round(d.x - this.camPx + skewAt(y)), Math.round(y + Math.min(0, d.y)), 2, 2);
     }
 
-    const lift = jumpHeight(s) * PX_PER_M;
+    const { pose, mood, bounce } = this.poseFor(c, raceTime);
+    const lift = jumpHeight(s) * PX_PER_M + bounce;
     drawShadow(g, x, y, lift);
-    drawRunner(g, x, y, this.poseFor(c, raceTime), c.look, lift);
+    drawRunner(g, x, y, pose, c.look, { lift, mood, time: this.elapsed, speed: s.v });
 
     if (c.isPlayer) {
       // Markierung über dem eigenen Läufer
       const crouched = this.crouch > 0.5 && s.firstTapTime === null;
-      const my = y - (crouched ? 30 : 48) - lift + Math.round(Math.sin(this.elapsed * 6));
+      const my = y - (crouched ? 40 : 66) - lift + Math.round(Math.sin(this.elapsed * 6));
       g.fillStyle(COLORS.outline, 1);
       g.fillTriangle(x - 5, my - 1, x + 5, my - 1, x, my + 5);
       g.fillStyle(COLORS.yellow, 1);
       g.fillTriangle(x - 3, my, x + 3, my, x, my + 3);
     }
   }
-}
-
-function lerpPose(a: Pose, b: Pose, t: number): Pose {
-  const l = (x: number, y: number) => x + (y - x) * t;
-  const limb = (x: Pose['nearLeg'], y: Pose['nearLeg']) => ({ upper: l(x.upper, y.upper), lower: l(x.lower, y.lower) });
-  return {
-    hip: l(a.hip, b.hip),
-    lean: l(a.lean, b.lean),
-    nearLeg: limb(a.nearLeg, b.nearLeg),
-    farLeg: limb(a.farLeg, b.farLeg),
-    nearArm: limb(a.nearArm, b.nearArm),
-    farArm: limb(a.farArm, b.farArm),
-  };
 }
