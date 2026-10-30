@@ -18,7 +18,7 @@ function write(key: string, value: string): void {
 }
 
 export interface PersonalBest {
-  time: number;
+  value: number;
   country: string;
 }
 
@@ -26,8 +26,10 @@ export function loadBest(event: string): PersonalBest | null {
   const raw = read(`rsg.best.${event}`);
   if (!raw) return null;
   try {
-    const best = JSON.parse(raw) as PersonalBest;
-    return typeof best.time === 'number' ? best : null;
+    // Ältere Versionen speicherten die Bestzeit als `time`
+    const best = JSON.parse(raw) as Partial<PersonalBest> & { time?: number };
+    const value = best.value ?? best.time;
+    return typeof value === 'number' ? { value, country: best.country ?? '' } : null;
   } catch {
     return null;
   }
@@ -54,4 +56,13 @@ export function loadLookSeed(): number {
 
 export function saveLookSeed(seed: number): void {
   write('rsg.look', String(seed));
+}
+
+export function loadEventIndex(): number {
+  const n = Number(read('rsg.event'));
+  return Number.isInteger(n) && n >= 0 ? n : 0;
+}
+
+export function saveEventIndex(index: number): void {
+  write('rsg.event', String(index));
 }

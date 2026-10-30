@@ -10,6 +10,7 @@ import {
   PX_PER_M,
   TRACK_FAR_Y,
   TRACK_NEAR_Y,
+  WORLD_RECORD,
   laneCenterY,
   skewAt,
 } from '../config';
@@ -50,7 +51,7 @@ import {
   type RunnerState,
   type Side,
 } from '../sim/hurdles';
-import type { RaceResult } from './ResultScene';
+import type { ResultRow, ResultSceneData } from './ResultScene';
 
 const SIM_DT = 1 / 120;
 const PLAYER_LANE = 2;
@@ -373,18 +374,41 @@ export class RaceScene extends Phaser.Scene {
   private showResults(): void {
     if (this.resultsShown) return;
     this.resultsShown = true;
-    const results: RaceResult[] = this.competitors.map((c) => ({
-      country: c.country,
-      look: c.look,
-      time: c.state.finishTime,
-      x: c.state.x,
-      hits: hurdlesHit(c.state),
-      reaction: c.state.firstTapTime,
-      isPlayer: c.isPlayer,
-    }));
+    const ranked = [...this.competitors].sort((a, b) => {
+      const ta = a.state.finishTime;
+      const tb = b.state.finishTime;
+      if (ta !== null && tb !== null) return ta - tb;
+      if (ta !== null) return -1;
+      if (tb !== null) return 1;
+      return b.state.x - a.state.x;
+    });
+    const rows: ResultRow[] = ranked.map((c) => {
+      const hits = hurdlesHit(c.state);
+      const time = c.state.finishTime;
+      return {
+        country: c.country,
+        look: c.look,
+        isPlayer: c.isPlayer,
+        valid: time !== null,
+        cells: [
+          { text: time !== null ? time.toFixed(2) : 'DNF' },
+          { text: hits === 0 ? 'SAUBER' : `${hits}x`, color: hits === 0 ? '#4cd964' : '#e8442e' },
+          { text: c.state.firstTapTime !== null ? c.state.firstTapTime.toFixed(3) : '-' },
+        ],
+      };
+    });
+    const data: ResultSceneData = {
+      event: '110h',
+      headers: ['ZEIT', 'HÜRDEN', 'REAKTION'],
+      rows,
+      playerScore: this.player.state.finishTime,
+      worldRecord: WORLD_RECORD,
+      notes: this.falseStarts > 0 ? [`FEHLSTARTS: ${this.falseStarts}`] : [],
+      replay: { scene: 'race', data: { countryIndex: this.countryIndex } },
+    };
     this.cameras.main.fadeOut(300, 16, 16, 28);
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
-      this.scene.start('result', { results, countryIndex: this.countryIndex, falseStarts: this.falseStarts });
+      this.scene.start('result', data);
     });
   }
 

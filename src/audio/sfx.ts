@@ -129,6 +129,47 @@ class Sfx {
     }
   }
 
+  // ---- Stabhochsprung
+
+  /** Stab rammt in den Einstichkasten */
+  plant(): void {
+    this.tone(95, 0.18, 'triangle', 0.5, 55);
+    this.burst(0.08, 0.35, 700);
+  }
+
+  /** Stab biegt sich */
+  bend(): void {
+    this.tone(110, 0.7, 'sawtooth', 0.04, 260);
+  }
+
+  /** Loslassen und Abdrücken */
+  release(): void {
+    this.burst(0.3, 0.25, 1500, 'bandpass');
+    this.tone(420, 0.22, 'square', 0.07, 950);
+  }
+
+  barFall(): void {
+    this.tone(320, 0.18, 'square', 0.14, 140);
+    this.tone(260, 0.15, 'square', 0.1, 120, 0.22);
+    this.tone(220, 0.1, 'square', 0.07, 110, 0.38);
+  }
+
+  matLand(): void {
+    this.burst(0.25, 0.5, 400);
+    this.tone(70, 0.2, 'triangle', 0.4, 45);
+  }
+
+  /** Enttäuschtes „Ohhh“ */
+  missed(): void {
+    this.tone(330, 0.6, 'triangle', 0.12, 160);
+  }
+
+  /** Kurzer Ton, wenn auf der Anzeigetafel ein Versuch erscheint */
+  board(ok: boolean): void {
+    if (ok) this.tone(880, 0.09, 'square', 0.08);
+    else this.tone(196, 0.14, 'square', 0.08);
+  }
+
   /** Publikumsrauschen; `level` 0..1 */
   crowd(level: number): void {
     if (!this.ctx || !this.master || !this.noise) return;

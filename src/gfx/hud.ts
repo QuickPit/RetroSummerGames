@@ -8,7 +8,7 @@ export interface HudRunner {
   isPlayer: boolean;
 }
 
-const BOTTOM_Y = 326;
+export const BOTTOM_Y = 326;
 const TAP_WINDOW = 1;
 
 /** Anzeige: Zeit, Mini-Karte, Tempo, Tasten-Feedback, Hürden-Bilanz. */
@@ -94,8 +94,11 @@ export class Hud {
     g.fillRect(0, BOTTOM_Y, GAME_WIDTH, 1);
 
     this.drawMiniMap(g, runners);
-    this.drawSpeed(g, p.v);
-    this.drawKeys(g, p);
+    drawSpeedBar(g, p.v, PHYSICS.maxSpeed);
+    const next: Side = p.lastSide === 'L' ? 'R' : 'L';
+    const flash = this.now < this.flashUntil ? this.flashSide : null;
+    drawKeyCaps(g, p.finishTime === null ? next : null, flash);
+    drawActionKey(g, p.air >= 0);
     this.drawHurdles(g, p);
   }
 
@@ -131,47 +134,6 @@ export class Hud {
     }
   }
 
-  private drawSpeed(g: Phaser.GameObjects.Graphics, v: number): void {
-    const segments = 24;
-    const filled = Math.round((v / PHYSICS.maxSpeed) * segments);
-    for (let i = 0; i < segments; i++) {
-      const t = i / segments;
-      const color = t < 0.55 ? 0x4cd964 : t < 0.85 ? COLORS.yellow : COLORS.red;
-      g.fillStyle(i < filled ? color : 0x2a2e40, 1);
-      g.fillRect(8 + i * 6, BOTTOM_Y + 18, 5, 12);
-    }
-  }
-
-  private drawKeys(g: Phaser.GameObjects.Graphics, p: RunnerState): void {
-    const next: Side = p.lastSide === 'L' ? 'R' : 'L';
-    const flashing = this.now < this.flashUntil;
-    const keyCap = (x: number, side: Side) => {
-      const lit = flashing && this.flashSide === side;
-      const expected = next === side && p.finishTime === null;
-      g.fillStyle(COLORS.outline, 1);
-      g.fillRect(x - 1, BOTTOM_Y + 15, 26, 20);
-      g.fillStyle(lit ? 0xffffff : expected ? COLORS.yellow : 0x5d6278, 1);
-      g.fillRect(x, BOTTOM_Y + 16, 24, 17);
-      g.fillStyle(lit ? 0xd0d0d0 : expected ? COLORS.orange : 0x3a3f55, 1);
-      g.fillRect(x, BOTTOM_Y + 30, 24, 3);
-      g.fillStyle(COLORS.outline, 1);
-      const cx = x + 12;
-      const cy = BOTTOM_Y + 23;
-      if (side === 'L') g.fillTriangle(cx - 6, cy, cx + 4, cy - 5, cx + 4, cy + 5);
-      else g.fillTriangle(cx + 6, cy, cx - 4, cy - 5, cx - 4, cy + 5);
-    };
-    keyCap(186, 'L');
-    keyCap(214, 'R');
-
-    const airborne = p.air >= 0;
-    g.fillStyle(COLORS.outline, 1);
-    g.fillRect(243, BOTTOM_Y + 15, 52, 20);
-    g.fillStyle(airborne ? 0x47c1d9 : 0x5d6278, 1);
-    g.fillRect(244, BOTTOM_Y + 16, 50, 17);
-    g.fillStyle(airborne ? 0x2a8aa0 : 0x3a3f55, 1);
-    g.fillRect(244, BOTTOM_Y + 30, 50, 3);
-  }
-
   private drawHurdles(g: Phaser.GameObjects.Graphics, p: RunnerState): void {
     p.hurdles.forEach((h, i) => {
       const x = 452 + i * 18;
@@ -185,4 +147,49 @@ export class Hud {
       }
     });
   }
+}
+
+// Bausteine, die alle Disziplinen gemeinsam nutzen
+
+/** Segmentierter Tempobalken unten links. */
+export function drawSpeedBar(g: Phaser.GameObjects.Graphics, v: number, max: number): void {
+  const segments = 24;
+  const filled = Math.round((v / max) * segments);
+  for (let i = 0; i < segments; i++) {
+    const t = i / segments;
+    const color = t < 0.55 ? 0x4cd964 : t < 0.85 ? COLORS.yellow : COLORS.red;
+    g.fillStyle(i < filled ? color : 0x2a2e40, 1);
+    g.fillRect(8 + i * 6, BOTTOM_Y + 18, 5, 12);
+  }
+}
+
+/** Pfeiltasten: die als Nächstes erwartete leuchtet gelb, ein Tipp blitzt weiß. */
+export function drawKeyCaps(g: Phaser.GameObjects.Graphics, expected: Side | null, flash: Side | null): void {
+  const keyCap = (x: number, side: Side) => {
+    const lit = flash === side;
+    const isNext = expected === side;
+    g.fillStyle(COLORS.outline, 1);
+    g.fillRect(x - 1, BOTTOM_Y + 15, 26, 20);
+    g.fillStyle(lit ? 0xffffff : isNext ? COLORS.yellow : 0x5d6278, 1);
+    g.fillRect(x, BOTTOM_Y + 16, 24, 17);
+    g.fillStyle(lit ? 0xd0d0d0 : isNext ? COLORS.orange : 0x3a3f55, 1);
+    g.fillRect(x, BOTTOM_Y + 30, 24, 3);
+    g.fillStyle(COLORS.outline, 1);
+    const cx = x + 12;
+    const cy = BOTTOM_Y + 23;
+    if (side === 'L') g.fillTriangle(cx - 6, cy, cx + 4, cy - 5, cx + 4, cy + 5);
+    else g.fillTriangle(cx + 6, cy, cx - 4, cy - 5, cx - 4, cy + 5);
+  };
+  keyCap(186, 'L');
+  keyCap(214, 'R');
+}
+
+/** Leertaste; `active` lässt sie aufleuchten. */
+export function drawActionKey(g: Phaser.GameObjects.Graphics, active: boolean, color = 0x47c1d9): void {
+  g.fillStyle(COLORS.outline, 1);
+  g.fillRect(243, BOTTOM_Y + 15, 52, 20);
+  g.fillStyle(active ? color : 0x5d6278, 1);
+  g.fillRect(244, BOTTOM_Y + 16, 50, 17);
+  g.fillStyle(active ? 0x2a8aa0 : 0x3a3f55, 1);
+  g.fillRect(244, BOTTOM_Y + 30, 50, 3);
 }

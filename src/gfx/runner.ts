@@ -64,6 +64,8 @@ export interface DrawOptions {
   speed?: number;
   /** Farbe einer umgehängten Medaille */
   medal?: number | null;
+  /** Drehung des ganzen Körpers um die Hüfte (positiv = nach vorne kippen) */
+  rotation?: number;
 }
 
 const HAIR_STYLES: HairStyle[] = ['short', 'short', 'buzz', 'afro', 'ponytail', 'ponytail', 'bun', 'bald'];
@@ -215,6 +217,76 @@ export function tiredPose(time: number): Pose {
     farLeg: { upper: 0.1, lower: -0.3 },
     nearArm: { upper: -0.75, lower: -0.65 },
     farArm: { upper: -0.65, lower: -0.55 },
+  };
+}
+
+// --------------------------------------------------------- Stabhochsprung
+
+/** Arme halten beim Anlauf den Stab vor dem Körper. */
+export function carryPole(p: Pose): Pose {
+  return { ...p, nearArm: { upper: 0.55, lower: 1.95 }, farArm: { upper: -0.25, lower: 1.3 } };
+}
+
+const VAULT_TAKEOFF: Pose = {
+  hip: STANDING_HIP,
+  lean: 0.1,
+  nearLeg: { upper: 1.3, lower: 0.2 },
+  farLeg: { upper: -0.4, lower: -0.7 },
+  nearArm: { upper: 0, lower: 0 },
+  farArm: { upper: 0, lower: 0 },
+};
+const VAULT_TUCK: Pose = {
+  ...VAULT_TAKEOFF,
+  lean: 0,
+  nearLeg: { upper: 1.9, lower: 0.5 },
+  farLeg: { upper: 1.7, lower: 0.3 },
+};
+const VAULT_EXTEND: Pose = {
+  ...VAULT_TAKEOFF,
+  lean: 0,
+  nearLeg: { upper: 0.15, lower: 0.05 },
+  farLeg: { upper: -0.05, lower: -0.1 },
+};
+
+/** Körperdrehung am Stab: vom Absprung bis kopfüber. */
+export function vaultRotation(p: number): number {
+  const t = Math.max(0, Math.min(1, (p - 0.12) / 0.8));
+  return -Math.PI * t * t * (3 - 2 * t);
+}
+
+/** Pose am Stab, p = Fortschritt (0 Einstich … 1 Stab senkrecht). */
+export function vaultPose(p: number): Pose {
+  const pose =
+    p < 0.4 ? lerpPose(VAULT_TAKEOFF, VAULT_TUCK, p / 0.4) : lerpPose(VAULT_TUCK, VAULT_EXTEND, Math.min(1, (p - 0.4) / 0.45));
+  // Die Arme zeigen immer zum Stabende, egal wie sich der Körper dreht
+  const arm = Math.PI + vaultRotation(p);
+  pose.nearArm = { upper: arm - 0.05, lower: arm - 0.1 };
+  pose.farArm = { upper: arm + 0.05, lower: arm };
+  return pose;
+}
+
+/** Flug über die Latte, u = Flugfortschritt 0..1 */
+export function flightPose(u: number): Pose {
+  return {
+    hip: STANDING_HIP,
+    lean: 0,
+    nearLeg: { upper: 0.55 + 0.4 * u, lower: 0.25 },
+    farLeg: { upper: 0.4 + 0.4 * u, lower: 0.1 },
+    nearArm: { upper: Math.PI - 0.5, lower: Math.PI - 0.3 },
+    farArm: { upper: Math.PI - 0.3, lower: Math.PI - 0.2 },
+  };
+}
+
+/** Auf der Matte liegend (wird mit -π/2 gedreht gezeichnet). */
+export function lyingPose(happy: boolean, time: number): Pose {
+  const wave = happy ? 0.3 * Math.sin(time * 8) : 0;
+  return {
+    hip: STANDING_HIP,
+    lean: 0,
+    nearLeg: { upper: 0.8, lower: -0.1 },
+    farLeg: { upper: 0.55, lower: -0.25 },
+    nearArm: happy ? { upper: Math.PI - 0.6 + wave, lower: Math.PI - 0.4 + wave } : { upper: 1.3, lower: 2.4 },
+    farArm: happy ? { upper: Math.PI - 0.2 - wave, lower: Math.PI - wave } : { upper: 1.1, lower: 2.2 },
   };
 }
 
@@ -509,9 +581,37 @@ function drawMedal(g: Gfx, x: number, y: number, nx: number, ny: number, color: 
  * Zeichnet einen Athleten. (x, y) ist der Bodenpunkt unter der Hüfte.
  */
 export function drawRunner(g: Gfx, x: number, y: number, pose: Pose, look: RunnerLook, opts: DrawOptions = {}): void {
-  const { lift = 0, mood = 'neutral', time = 0, speed = 0, medal = null } = opts;
-  const hx = x;
-  const hy = y - pose.hip - lift;
+  const { lift = 0, rotation = 0 } = opts;
+  const hipY = y - pose.hip - lift;
+  if (rotation === 0) {
+    drawFigure(g, x, hipY, pose, look, opts);
+    return;
+  }
+  g.save();
+  g.translateCanvas(x, hipY);
+  g.rotateCanvas(rotation);
+  drawFigure(g, 0, 0, pose, look, opts);
+  g.restore();
+}
+
+/** Position der vorderen Hand relativ zur Hüfte (ungedreht, in Pixeln). */
+export function handOffset(pose: Pose): { x: number; y: number } {
+  const sx = Math.sin(pose.lean) * TORSO;
+  const sy = -Math.cos(pose.lean) * TORSO;
+  const [ex, ey] = along(sx, sy, pose.nearArm.upper, UPPER_ARM);
+  const [hx, hy] = along(ex, ey, pose.nearArm.lower, FOREARM);
+  return { x: hx, y: hy };
+}
+
+/** Dreht einen Punkt wie `rotateCanvas` (positiv = im Uhrzeigersinn). */
+export function rotatePoint(x: number, y: number, angle: number): { x: number; y: number } {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  return { x: x * c - y * s, y: x * s + y * c };
+}
+
+function drawFigure(g: Gfx, hx: number, hy: number, pose: Pose, look: RunnerLook, opts: DrawOptions): void {
+  const { mood = 'neutral', time = 0, speed = 0, medal = null } = opts;
   const ux = Math.sin(pose.lean);
   const uy = -Math.cos(pose.lean);
   const sx = hx + ux * TORSO;
