@@ -1,6 +1,6 @@
 // Alle Disziplinen an einem Ort – das Menü und die Ergebnisse lesen hier.
 
-export type EventKey = '110h' | 'pole' | 'bmx';
+export type EventKey = '110h' | 'pole' | 'long' | 'bmx';
 
 export interface EventInfo {
   key: EventKey;
@@ -37,6 +37,19 @@ export const EVENTS: readonly EventInfo[] = [
       ['LEERTASTE (2.)', 'STAB SENKRECHT: LOSLASSEN'],
     ],
     bestLabel: 'BESTHÖHE',
+    lowerIsBetter: false,
+    format: (v) => `${v.toFixed(2)} M`,
+  },
+  {
+    key: 'long',
+    name: 'WEITSPRUNG',
+    scene: 'longjump',
+    controls: [
+      ['PFEIL LINKS/RECHTS', 'ABWECHSELND TIPPEN = ANLAUF'],
+      ['LEERTASTE AM BRETT', 'HALTEN = WINKEL, LOS = SPRUNG'],
+      ['LEERTASTE IN LUFT', 'KURZ VOR LANDUNG: BEINE VOR'],
+    ],
+    bestLabel: 'BESTWEITE',
     lowerIsBetter: false,
     format: (v) => `${v.toFixed(2)} M`,
   },

@@ -204,6 +204,29 @@ class Sfx {
     this.tone(base * 1.5, 0.14, 'square', 0.1, undefined, 0.08);
   }
 
+  // ---- Weitsprung
+
+  /** Fuß trifft das Absprungbrett */
+  boardHit(): void {
+    this.tone(130, 0.12, 'triangle', 0.45, 70);
+    this.burst(0.06, 0.3, 1200);
+  }
+
+  sandLand(): void {
+    this.burst(0.4, 0.45, 700);
+    this.tone(65, 0.18, 'triangle', 0.3, 40);
+  }
+
+  /** Kampfrichter hebt die Fahne */
+  flag(valid: boolean): void {
+    if (valid) {
+      this.tone(988, 0.08, 'square', 0.08);
+      this.tone(1319, 0.12, 'square', 0.08, undefined, 0.09);
+    } else {
+      this.falseStart();
+    }
+  }
+
   /** Publikumsrauschen; `level` 0..1 */
   crowd(level: number): void {
     if (!this.ctx || !this.master || !this.noise) return;

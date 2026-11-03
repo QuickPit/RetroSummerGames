@@ -295,6 +295,60 @@ export function lyingPose(happy: boolean, time: number): Pose {
   };
 }
 
+// -------------------------------------------------------------- Weitsprung
+
+/** Absprung vom Brett: Kniehub, Arme schwingen nach vorne oben */
+export function ljTakeoffPose(u: number): Pose {
+  return {
+    hip: STANDING_HIP,
+    lean: 0.1 - 0.15 * u,
+    nearLeg: { upper: 0.9 + 0.5 * u, lower: 0.1 + 0.2 * u },
+    farLeg: { upper: -0.35, lower: -0.6 },
+    nearArm: { upper: 1.2 + 0.8 * u, lower: 1.6 + 0.6 * u },
+    farArm: { upper: -0.6, lower: -0.2 },
+  };
+}
+
+/** Laufsprung in der Luft („Hitch-Kick“), u = Flugfortschritt */
+export function ljFlightPose(u: number): Pose {
+  const p = runPose(0.25 + u * 1.2, 0.9);
+  p.lean = 0.15 - 0.25 * Math.sin(Math.PI * u);
+  p.nearArm = { upper: Math.PI - 0.4 - 2 * u, lower: Math.PI - 0.2 - 2 * u };
+  p.farArm = { upper: 0.8 + 1.6 * u, lower: 1.2 + 1.4 * u };
+  return p;
+}
+
+/** Landung: Beine weit nach vorne, Oberkörper klappt nach vorne */
+export function ljLandPose(): Pose {
+  return {
+    hip: STANDING_HIP,
+    lean: 0.75,
+    nearLeg: { upper: 1.45, lower: 1.5 },
+    farLeg: { upper: 1.35, lower: 1.45 },
+    nearArm: { upper: 1.3, lower: 1.6 },
+    farArm: { upper: 1.1, lower: 1.4 },
+  };
+}
+
+/** Im Sand sitzend – nach vorne gebeugt oder nach hinten gefallen */
+export function sitPose(back: boolean): Pose {
+  return {
+    hip: 4,
+    lean: back ? -0.55 : 0.55,
+    nearLeg: { upper: 1.5, lower: 1.55 },
+    farLeg: { upper: 1.4, lower: 1.5 },
+    nearArm: back ? { upper: -0.7, lower: -0.5 } : { upper: 1.0, lower: 1.3 },
+    farArm: back ? { upper: -0.5, lower: -0.3 } : { upper: 0.8, lower: 1.1 },
+  };
+}
+
+/** Kampfrichter mit erhobener Fahne */
+export function flagPose(raised: boolean): Pose {
+  const p = standPose();
+  p.nearArm = raised ? { upper: Math.PI - 0.25, lower: Math.PI - 0.15 } : { upper: 0.3, lower: 0.6 };
+  return p;
+}
+
 export function lerpPose(a: Pose, b: Pose, t: number): Pose {
   const l = (x: number, y: number) => x + (y - x) * t;
   const limb = (x: Limb, y: Limb) => ({ upper: l(x.upper, y.upper), lower: l(x.lower, y.lower) });

@@ -6,9 +6,9 @@ diesmal per Tastatur.
 
 **Spielen:** https://quickpit.github.io/RetroSummerGames/
 
-## Aktueller Stand (v0.4 – Solo-Prototyp)
+## Aktueller Stand (v0.5 – Solo-Prototyp)
 
-Drei Disziplinen gegen drei Computer-Gegner (Rookie, Profi, Champion). Im Startbildschirm wählst du
+Vier Disziplinen gegen drei Computer-Gegner (Rookie, Profi, Champion). Im Startbildschirm wählst du
 mit **↑ / ↓** die Zeile (Disziplin, Nation, Athlet) und änderst sie mit **← / →**.
 
 ### 110 m Hürden
@@ -36,6 +36,19 @@ mit **↑ / ↓** die Zeile (Disziplin, Nation, Athlet) und änderst sie mit **�
 - Wettkampf nach echten Regeln: die Latte steigt von 3,80 m an, drei Versuche pro Höhe, nach drei Fehlversuchen ist Schluss.
   Bei gleicher Höhe entscheiden die wenigeren Fehlversuche.
 - Nach jedem Sprung gibt es Rückmeldung zu Sprunghöhe, Einstich und Loslassen.
+
+### Weitsprung
+
+| Taste | Aktion |
+| --- | --- |
+| ← / → (oder A / D) | abwechselnd tippen = Anlauf |
+| Leertaste am Brett | gedrückt halten = Absprungwinkel steigt, loslassen = Absprung |
+| Leertaste in der Luft | kurz vor der Landung: Beine nach vorne strecken |
+
+- Gemessen wird ab der Brettkante – wer zu früh abspringt, verschenkt Weite, wer übertritt, hat einen Fehlversuch (rote Fahne).
+- Der beste Absprungwinkel liegt um 30°. Ohne Beinestrecken fällt man nach hinten in den Sand und verliert fast einen Meter.
+- Drei Durchgänge gegen drei Computer-Gegner, der beste Versuch zählt; bei Gleichstand entscheidet der zweitbeste.
+- Anzeigetafel nach jedem Versuch, Führungs- und Weltrekordlinie (8,95 m) in der Grube, Maßband nach der Landung.
 
 ### BMX (Strandkurs)
 
@@ -82,16 +95,16 @@ Jeder Push auf `main` wird per GitHub Actions getestet, gebaut und auf GitHub Pa
 
 ```
 src/
-  sim/        Reine Spiellogik ohne Grafik (Hürden, Stabhochsprung, BMX, Wettkampf, Gegner) – getestet
+  sim/        Reine Spiellogik ohne Grafik (Hürden, Stabhochsprung, Weitsprung, BMX, Wettkampf, Gegner) – getestet
   gfx/        Prozedurale Grafik: Athleten, BMX-Rad, Stadion, Strand, Flaggen, HUD
   audio/      Per Web Audio synthetisierte Soundeffekte
-  scenes/     Phaser-Szenen: Titel, Hürdenlauf, Stabhochsprung, BMX, Ergebnis
+  scenes/     Phaser-Szenen: Titel, Hürdenlauf, Stabhochsprung, Weitsprung, BMX, Ergebnis
   data/       Disziplinen, Nationen und lokale Speicherung (Bestleistungen, Auswahl)
 ```
 
 Alle Grafiken und Sounds werden zur Laufzeit erzeugt – es gibt keine fremden Assets.
 Die Spielgefühl-Parameter (Beschleunigung pro Tipp, Sprungdauer, Strafe beim Reißen …)
-stehen gesammelt in `PHYSICS` (`src/sim/hurdles.ts`), `VAULT` (`src/sim/polevault.ts`) und `BMX` (`src/sim/bmx.ts`).
+stehen gesammelt in `PHYSICS` (`src/sim/hurdles.ts`), `VAULT` (`src/sim/polevault.ts`), `LJ` (`src/sim/longjump.ts`) und `BMX` (`src/sim/bmx.ts`).
 
 ## Ausblick
 
