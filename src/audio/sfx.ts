@@ -170,6 +170,40 @@ class Sfx {
     else this.tone(196, 0.14, 'square', 0.08);
   }
 
+  // ---- BMX
+
+  /** Startgatter klappt herunter */
+  gate(): void {
+    this.tone(160, 0.2, 'square', 0.2, 70);
+    this.burst(0.15, 0.4, 2500, 'bandpass');
+  }
+
+  takeoff(): void {
+    this.burst(0.2, 0.12, 2200, 'bandpass');
+  }
+
+  bikeLand(clean: boolean): void {
+    this.burst(0.12, 0.35, 500);
+    this.tone(clean ? 110 : 80, 0.12, 'triangle', 0.3, 60);
+  }
+
+  crash(): void {
+    this.burst(0.4, 0.6, 900);
+    this.tone(200, 0.3, 'square', 0.15, 50);
+    this.tone(500, 0.08, 'square', 0.08, 300, 0.12);
+  }
+
+  splash(): void {
+    this.burst(0.35, 0.35, 3000, 'highpass');
+  }
+
+  /** Trick gestanden – je mehr Punkte, desto höher der Ton */
+  trick(points: number): void {
+    const base = Math.min(1200, 520 + points / 4);
+    this.tone(base, 0.08, 'square', 0.1);
+    this.tone(base * 1.5, 0.14, 'square', 0.1, undefined, 0.08);
+  }
+
   /** Publikumsrauschen; `level` 0..1 */
   crowd(level: number): void {
     if (!this.ctx || !this.master || !this.noise) return;

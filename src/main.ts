@@ -1,6 +1,7 @@
 import '@fontsource/press-start-2p/latin-400.css';
 import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from './config';
+import { BmxScene } from './scenes/BmxScene';
 import { BootScene } from './scenes/BootScene';
 import { PoleVaultScene } from './scenes/PoleVaultScene';
 import { RaceScene } from './scenes/RaceScene';
@@ -28,7 +29,7 @@ async function start(): Promise<void> {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
     },
-    scene: [BootScene, TitleScene, RaceScene, PoleVaultScene, ResultScene],
+    scene: [BootScene, TitleScene, RaceScene, PoleVaultScene, BmxScene, ResultScene],
   });
 
   // Für automatisierte Tests im Entwicklungsmodus erreichbar machen.

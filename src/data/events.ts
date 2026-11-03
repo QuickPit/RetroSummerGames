@@ -1,6 +1,6 @@
 // Alle Disziplinen an einem Ort – das Menü und die Ergebnisse lesen hier.
 
-export type EventKey = '110h' | 'pole';
+export type EventKey = '110h' | 'pole' | 'bmx';
 
 export interface EventInfo {
   key: EventKey;
@@ -39,6 +39,20 @@ export const EVENTS: readonly EventInfo[] = [
     bestLabel: 'BESTHÖHE',
     lowerIsBetter: false,
     format: (v) => `${v.toFixed(2)} M`,
+  },
+  {
+    key: 'bmx',
+    name: 'BMX',
+    scene: 'bmx',
+    controls: [
+      ['PFEIL LINKS/RECHTS', 'ABWECHSELND TIPPEN = TRETEN'],
+      ['PFEIL HOCH', 'HOPSER (Z. B. ÜBER STÄMME)'],
+      ['IN DER LUFT L/R', 'HALTEN = SALTO / AUSRICHTEN'],
+      ['LEERTASTE (LUFT)', 'SUPERMAN – VOR DER LANDUNG LOS!'],
+    ],
+    bestLabel: 'HIGHSCORE',
+    lowerIsBetter: false,
+    format: (v) => `${Math.round(v)} P`,
   },
 ];
 

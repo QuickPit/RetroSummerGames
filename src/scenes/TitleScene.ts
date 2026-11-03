@@ -13,6 +13,7 @@ import {
   saveLookSeed,
 } from '../data/storage';
 import { drawFlag } from '../gfx/flags';
+import { drawBmx } from '../gfx/bike';
 import { carryPole, createLook, drawRunner, drawShadow, handOffset, idlePose, type RunnerLook } from '../gfx/runner';
 import { Stadium } from '../gfx/stadium';
 
@@ -97,7 +98,7 @@ export class TitleScene extends Phaser.Scene {
     this.bestText = text(GAME_WIDTH / 2, 296, '', 8, '#4cd964').setOrigin(0.5, 0);
     const prompt = text(GAME_WIDTH / 2, 318, 'ENTER = START', 16).setOrigin(0.5, 0).setStroke('#10101c', 4);
     this.tweens.add({ targets: prompt, alpha: 0.25, duration: 550, yoyo: true, repeat: -1 });
-    text(GAME_WIDTH - 6, 350, 'v0.3 SOLO', 8, '#5d6278').setOrigin(1, 0);
+    text(GAME_WIDTH - 6, 350, 'v0.4 SOLO', 8, '#5d6278').setOrigin(1, 0);
 
     // Der eigene Athlet wippt neben der Steuerungshilfe
     this.previewGfx = this.add.graphics();
@@ -194,6 +195,19 @@ export class TitleScene extends Phaser.Scene {
     const x = 58;
     const y = 282;
     drawShadow(g, x, y, 0);
+    if (EVENTS[this.eventIndex].key === 'bmx') {
+      // Im Stand pedalierend auf dem Rad
+      drawBmx(g, x, y, 0, this.look, {
+        crank: this.elapsed * 0.4,
+        stance: 'pedal',
+        mood: 'neutral',
+        time: this.elapsed,
+        frameColor: this.look.shoe,
+        helmetColor: COUNTRIES[this.countryIndex].jersey,
+        speed: 0,
+      });
+      return;
+    }
     const vaulting = EVENTS[this.eventIndex].key === 'pole';
     const pose = vaulting ? carryPole(idlePose(this.elapsed, this.look.seed)) : idlePose(this.elapsed, this.look.seed);
     drawRunner(g, x, y, pose, this.look, { time: this.elapsed });

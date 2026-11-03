@@ -7,7 +7,7 @@ import { createRng } from '../sim/cpu';
 
 type Ctx = CanvasRenderingContext2D;
 
-function canvasTexture(scene: Phaser.Scene, key: string, w: number, h: number, draw: (ctx: Ctx) => void): void {
+export function canvasTexture(scene: Phaser.Scene, key: string, w: number, h: number, draw: (ctx: Ctx) => void): void {
   if (scene.textures.exists(key)) return;
   const tex = scene.textures.createCanvas(key, w, h);
   if (!tex) throw new Error(`Textur ${key} konnte nicht erzeugt werden`);

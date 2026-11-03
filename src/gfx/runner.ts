@@ -17,6 +17,9 @@ const UPPER_ARM = 8;
 const FOREARM = 7;
 const STANDING_HIP = THIGH + SHIN + 1;
 
+/** Körpermaße in Pixeln – z. B. für die Haltung auf dem BMX-Rad */
+export const BODY = { THIGH, SHIN, FOOT, TORSO, NECK, HEAD_R, UPPER_ARM, FOREARM } as const;
+
 interface Limb {
   upper: number;
   lower: number;
@@ -66,6 +69,8 @@ export interface DrawOptions {
   medal?: number | null;
   /** Drehung des ganzen Körpers um die Hüfte (positiv = nach vorne kippen) */
   rotation?: number;
+  /** Farbe eines Helms (BMX) */
+  helmet?: number;
 }
 
 const HAIR_STYLES: HairStyle[] = ['short', 'short', 'buzz', 'afro', 'ponytail', 'ponytail', 'bun', 'bald'];
@@ -457,7 +462,44 @@ function drawHipNumber(g: Gfx, x: number, y: number, n: number): void {
   }
 }
 
-function drawHead(g: Gfx, hx: number, hy: number, look: RunnerLook, mood: Mood, time: number, speed: number): void {
+function drawHelmet(g: Gfx, hx: number, hy: number, color: number, accent: number): void {
+  // Schale über Oberkopf und Hinterkopf, vorne endet sie über den Augen
+  const shell = (r: number) => {
+    const pts: { x: number; y: number }[] = [];
+    for (let i = 0; i <= 12; i++) {
+      const a = Math.PI - 0.35 + (i / 12) * Math.PI;
+      pts.push({ x: hx - 0.4 + Math.cos(a) * r, y: hy - 0.6 + Math.sin(a) * r });
+    }
+    return pts;
+  };
+  g.fillStyle(COLORS.outline, 1);
+  g.fillPoints(shell(HEAD_R + 2.2), true);
+  g.fillStyle(color, 1);
+  g.fillPoints(shell(HEAD_R + 1.2), true);
+  g.fillStyle(shade(color, 1.3), 1);
+  g.fillRect(hx - 2, hy - HEAD_R - 0.5, 3, 1);
+  // Streifen und Schirm
+  g.fillStyle(accent, 1);
+  g.fillRect(hx - HEAD_R - 0.5, hy - 2.5, 4, 1);
+  g.fillStyle(COLORS.outline, 1);
+  g.fillRect(hx + 1.5, hy - 3.6, 6, 2);
+  g.fillStyle(shade(color, 0.7), 1);
+  g.fillRect(hx + 2, hy - 3.1, 5, 1);
+  // Kinnriemen
+  g.lineStyle(1, COLORS.outline, 1);
+  g.lineBetween(hx - 1, hy - 1, hx + 1.5, hy + 4);
+}
+
+function drawHead(
+  g: Gfx,
+  hx: number,
+  hy: number,
+  look: RunnerLook,
+  mood: Mood,
+  time: number,
+  speed: number,
+  helmet?: number,
+): void {
   const r = HEAD_R;
   const hair = look.hair;
   const wind = Math.min(1, speed / 8);
@@ -471,10 +513,10 @@ function drawHead(g: Gfx, hx: number, hy: number, look: RunnerLook, mood: Mood, 
     const [p2x, p2y] = along(p1x, p1y, a + sway * 1.5 - 0.15, 4);
     drawPieces(g, [seg(bx, by, p1x, p1y, 3.2, 2.6, hair), seg(p1x, p1y, p2x, p2y, 2.6, 1.4, hair), dot(bx, by, 1.4, look.accent, false)]);
   }
-  if (look.hairStyle === 'bun') drawPieces(g, [dot(hx - r + 0.5, hy - r + 1.5, 2.6, hair)]);
+  if (look.hairStyle === 'bun' && helmet === undefined) drawPieces(g, [dot(hx - r + 0.5, hy - r + 1.5, 2.6, hair)]);
 
   // Kopf mit Kontur; die Haare bleiben als Sichel oben und hinten stehen
-  if (look.hairStyle === 'afro') {
+  if (look.hairStyle === 'afro' && helmet === undefined) {
     g.fillStyle(COLORS.outline, 1);
     g.fillCircle(hx - 1.2, hy - 1.8, r + 2.8);
     g.fillStyle(hair, 1);
@@ -496,8 +538,10 @@ function drawHead(g: Gfx, hx: number, hy: number, look: RunnerLook, mood: Mood, 
   g.fillStyle(look.skin, 1);
   g.fillRect(hx + r, hy, 1, 2);
 
+  if (helmet !== undefined) drawHelmet(g, hx, hy, helmet, look.accent);
+
   // Stirnband im 80er-Stil, die Enden flattern
-  if (look.headband) {
+  if (look.headband && helmet === undefined) {
     g.fillStyle(look.accent, 1);
     g.fillRect(hx - r, hy - 3, r * 2, 2);
     const flap = Math.sin(time * 16 + look.seed) * (0.5 + wind);
@@ -658,7 +702,7 @@ function drawFigure(g: Gfx, hx: number, hy: number, pose: Pose, look: RunnerLook
 
   const headX = sx + ux * (NECK + HEAD_R);
   const headY = sy + uy * (NECK + HEAD_R);
-  drawHead(g, headX, headY, look, mood, time, speed);
+  drawHead(g, headX, headY, look, mood, time, speed, opts.helmet);
 
   drawHipNumber(g, hx - 3, hy, look.number);
   drawPieces(g, legPieces(hx, hy, pose.nearLeg, near));

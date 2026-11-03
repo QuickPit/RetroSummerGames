@@ -371,9 +371,23 @@ export class RaceScene extends Phaser.Scene {
     }
   }
 
+  /** Wer noch läuft, kommt im Schnelldurchlauf ins Ziel */
+  private finishRemaining(): void {
+    let t = this.simTime;
+    while (this.competitors.some((c) => !isFinished(c.state)) && t < this.simTime + 60) {
+      t += SIM_DT;
+      for (const c of this.competitors) {
+        if (c.isPlayer || isFinished(c.state)) continue;
+        c.cpu?.update(t);
+        step(c.state, SIM_DT, t);
+      }
+    }
+  }
+
   private showResults(): void {
     if (this.resultsShown) return;
     this.resultsShown = true;
+    this.finishRemaining();
     const ranked = [...this.competitors].sort((a, b) => {
       const ta = a.state.finishTime;
       const tb = b.state.finishTime;
