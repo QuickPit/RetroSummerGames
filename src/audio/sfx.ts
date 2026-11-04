@@ -385,6 +385,7 @@ class Sfx {
     for (const o of [osc, lfo, trill]) {
       o.start(t);
       o.stop(t + 0.9);
+      this.track(o);
     }
   }
 
@@ -430,6 +431,7 @@ class Sfx {
     src.connect(filter).connect(gain).connect(this.out);
     src.start(t, Math.random() * 1.5);
     src.stop(t + 0.4);
+    this.track(src);
   }
 
   /** Warnung: Luft wird knapp */

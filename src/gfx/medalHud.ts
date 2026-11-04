@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS, GAME_HEIGHT, GAME_WIDTH } from '../config';
 import type { Medal } from '../sim/competition';
+import { mixColor, shade } from './runner';
 
 // Bausteine für Medaillenspiegel und Rückfrage. Ziffern und Texte setzt die
 // Szene als Text darüber – hier wird nur gezeichnet, Pixel für Pixel.
@@ -18,19 +19,6 @@ export const MEDAL_R = 6;
 
 const FRAME_DIM = 0x6b5a1e;
 const RIBBON = { left: COLORS.red, leftDark: 0xa82e20, right: 0x2f6fd6, rightDark: 0x1f4a99 };
-
-function scale(color: number, f: number): number {
-  const c = Phaser.Display.Color.IntegerToColor(color);
-  const ch = (v: number) => Math.max(0, Math.min(255, Math.round(v * f)));
-  return Phaser.Display.Color.GetColor(ch(c.red), ch(c.green), ch(c.blue));
-}
-
-function mix(a: number, b: number, t: number): number {
-  const ca = Phaser.Display.Color.IntegerToColor(a);
-  const cb = Phaser.Display.Color.IntegerToColor(b);
-  const m = (x: number, y: number) => Math.round(x + (y - x) * t);
-  return Phaser.Display.Color.GetColor(m(ca.red, cb.red), m(ca.green, cb.green), m(ca.blue, cb.blue));
-}
 
 /** Pixelkreis mit Durchmesser d: je Zeile die erste Spalte (die letzte ist d-1-x0) */
 function discRows(d: number): number[] {
@@ -57,8 +45,8 @@ function inDisc(rows: number[], i: number, j: number): boolean {
  */
 function drawMedalDisc(g: Phaser.GameObjects.Graphics, px: number, py: number, medal: Medal): void {
   const base = MEDAL_COLORS[medal];
-  const light = mix(base, 0xffffff, 0.5);
-  const dark = scale(base, 0.6);
+  const light = mixColor(base, 0xffffff, 0.5);
+  const dark = shade(base, 0.6);
   const x0 = px - MEDAL_R;
   const y0 = py - MEDAL_R;
   for (let j = 0; j < 13; j++) {
@@ -69,7 +57,7 @@ function drawMedalDisc(g: Phaser.GameObjects.Graphics, px: number, py: number, m
       let c: number;
       if (!inDisc(DISC11, i - 1, j - 1)) c = COLORS.outline;
       else if (!inDisc(DISC9, i - 2, j - 2)) c = dx + dy <= -2 ? light : dx + dy >= 2 ? dark : base;
-      else c = dx + dy >= 6 ? scale(base, 0.85) : base;
+      else c = dx + dy >= 6 ? shade(base, 0.85) : base;
       g.fillStyle(c, 1);
       g.fillRect(x0 + i, y0 + j, 1, 1);
     }
@@ -91,7 +79,7 @@ export function drawMedalHeader(g: Phaser.GameObjects.Graphics, px: number, py: 
     R: RIBBON.leftDark,
     b: RIBBON.right,
     B: RIBBON.rightDark,
-    c: scale(MEDAL_COLORS[medal], 0.6),
+    c: shade(MEDAL_COLORS[medal], 0.6),
     C: MEDAL_COLORS[medal],
   };
   RIBBON_MAP.forEach((row, j) => {

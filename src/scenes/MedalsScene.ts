@@ -36,14 +36,15 @@ export interface MedalsSceneData {
   mode: MedalsMode;
 }
 
-// Spalten: Pfeil-Schild „DU“, Platz, Flagge, Code, Name, Medaillen (Mitte der Scheibe), Disziplinen
-const COL = { tag: 46, place: 76, flag: 100, code: 122, name: 154, gold: 292, silver: 324, bronze: 356 };
-const EVENT_COLS: { key: EventKey; label: string; x: number }[] = [
-  { key: '110h', label: 'HÜR', x: 404 },
-  { key: 'long', label: 'WEIT', x: 454 },
-  { key: 'pole', label: 'STAB', x: 506 },
-  { key: 'bmx', label: 'BMX', x: 558 },
-];
+// Spalten: Pfeil-Schild „DU“, Platz, Flagge, Code, Name, Medaillen (Mitte der Scheibe), Disziplinen (Mitte)
+const COL = { tag: 46, place: 76, flag: 100, code: 122, name: 154, gold: 266, silver: 294, bronze: 322 };
+const DIVIDER_X = 342;
+const EVENT_LABELS: Record<EventKey, string> = { '110h': 'HÜR', long: 'WEIT', pole: 'STAB', swim: 'SCHW', bmx: 'BMX' };
+const EVENT_COLS: { key: EventKey; label: string; x: number }[] = COMPETITION_ORDER.map((key, i) => ({
+  key,
+  label: EVENT_LABELS[key],
+  x: 368 + i * 52,
+}));
 const PANEL = { x: 38, y: 44, w: GAME_WIDTH - 76 };
 const HEAD_Y = 56;
 const ROW_Y = 76;
@@ -182,7 +183,7 @@ export class MedalsScene extends Phaser.Scene {
     const rowYs = this.table.map((_, i) => ROW_Y + i * ROW_H - 5);
     const g = this.add.graphics();
     drawTablePanel(g, PANEL.x, PANEL.y, PANEL.w, HEAD_Y + 12 - PANEL.y, rowYs, ROW_H - 2);
-    drawColumnDivider(g, 382, PANEL.y + 4, rowYs[rowYs.length - 1] + ROW_H - 2);
+    drawColumnDivider(g, DIVIDER_X, PANEL.y + 4, rowYs[rowYs.length - 1] + ROW_H - 2);
     const blink = this.add.graphics();
     this.blinkObjects.push(blink);
 
@@ -193,7 +194,10 @@ export class MedalsScene extends Phaser.Scene {
       drawMedalHeader(g, px, HEAD_Y + 3, PLACE_MEDALS[i]);
       this.text(px - 3, HEAD_Y, 'GSB'[i], 8, '#10101c');
     });
-    for (const c of EVENT_COLS) this.text(c.x, HEAD_Y, c.label, 8, c.key === this.lastEvent ? '#ffffff' : GREY);
+    // Beschriftung auf die Spaltenmitte zentriert (Glyphen sind 7 px breit)
+    for (const c of EVENT_COLS) {
+      this.text(c.x - c.label.length * 4 + 1, HEAD_Y, c.label, 8, c.key === this.lastEvent ? '#ffffff' : GREY);
+    }
 
     const anyResult = this.state.index > 0;
     this.table.forEach((row, i) => {
@@ -216,8 +220,7 @@ export class MedalsScene extends Phaser.Scene {
       });
 
       for (const c of EVENT_COLS) {
-        // Sichtbare Mitte der Überschrift (Glyphen sind 7 px breit)
-        const px = c.x + c.label.length * 4 - 1;
+        const px = c.x;
         const p = placingOf(this.state, c.key, row.code);
         const isNew = this.mode === 'between' && c.key === this.lastEvent;
         if (!p) {

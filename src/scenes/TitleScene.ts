@@ -21,7 +21,7 @@ import { drawBmx } from '../gfx/bike';
 import { carryPole, createLook, drawRunner, drawShadow, handOffset, idlePose, type RunnerLook } from '../gfx/runner';
 import { Stadium } from '../gfx/stadium';
 import { armCirclePose, drawSwimmerUpright } from '../gfx/swimmer';
-import { createCompetition } from '../sim/competition';
+import { COMPETITION_ORDER, createCompetition } from '../sim/competition';
 
 const STRIPES = [0xf7d038, 0xf08a24, 0xe8442e, 0xc42f6e, 0x7a3fc4];
 const ROWS = ['MODUS', 'DISZIPLIN', 'NATION', 'ATHLET'] as const;
@@ -31,7 +31,7 @@ const VALUE_X = 370;
 const HELP_Y = 232;
 const ROW = { mode: 0, event: 1, nation: 2, look: 3 };
 const COMPETITION_HELP: [string, string][] = [
-  ['REIHENFOLGE', 'HÜRDEN - WEIT - STAB - BMX'],
+  ['REIHENFOLGE', 'HÜR - WEIT - STAB - SCHW - BMX'],
   ['WERTUNG', 'MEDAILLENSPIEGEL DER NATIONEN'],
   ['STEUERUNG', 'VOR JEDER DISZIPLIN ERKLÄRT'],
   ['PFEIL HOCH/RUNTER', 'MENÜ: ZEILE WÄHLEN'],
@@ -181,7 +181,7 @@ export class TitleScene extends Phaser.Scene {
     this.look = createLook(country, this.lookSeed, 1);
 
     this.values[ROW.mode].setText(competition ? 'WETTKAMPF' : 'EINZELDISZIPLIN');
-    this.values[ROW.event].setText(competition ? 'ALLE 4' : event.name);
+    this.values[ROW.event].setText(competition ? `ALLE ${COMPETITION_ORDER.length}` : event.name);
     this.values[ROW.nation].setText(country.name);
     this.values[ROW.look].setText(`TYP ${this.lookSeed}`);
     // Bei der Nation sitzt die Flagge links neben dem Namen

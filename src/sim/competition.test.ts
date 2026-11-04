@@ -159,7 +159,7 @@ describe('Gesamtsieger', () => {
 
   it('gibt es nicht ohne Medaillen', () => {
     const none = ['GER', 'AUT', 'FRA', 'ITA'].map((code) => ({ code, valid: false }));
-    const s = play(none, none, none, none);
+    const s = play(...COMPETITION_ORDER.map(() => none));
     expect(currentEvent(s)).toBeNull();
     expect(overallWinners(s)).toEqual([]);
   });
@@ -167,14 +167,14 @@ describe('Gesamtsieger', () => {
 
 describe('recordEvent', () => {
   it('spielt die Disziplinen in der festen Reihenfolge', () => {
-    expect([...COMPETITION_ORDER]).toEqual(['110h', 'long', 'pole', 'bmx']);
+    expect([...COMPETITION_ORDER]).toEqual(['110h', 'long', 'pole', 'swim', 'bmx']);
     let s = fixed();
     for (const key of COMPETITION_ORDER) {
       expect(currentEvent(s)).toBe(key);
       s = recordEvent(s, key, order('GER', 'AUT', 'FRA', 'ITA'));
     }
     expect(currentEvent(s)).toBeNull();
-    expect(medalTable(s)[0]).toMatchObject({ code: 'GER', gold: 4 });
+    expect(medalTable(s)[0]).toMatchObject({ code: 'GER', gold: COMPETITION_ORDER.length });
   });
 
   it('ist idempotent', () => {
@@ -262,7 +262,7 @@ describe('playerStanding', () => {
 
   it('meldet „noch keine Medaillen“ statt einer geteilten Spitze', () => {
     expect(playerStanding(fixed()).kind).toBe('noMedals');
-    expect(playerStanding(play(none, none, none, none)).kind).toBe('noMedals');
+    expect(playerStanding(play(...COMPETITION_ORDER.map(() => none))).kind).toBe('noMedals');
   });
 
   it('erkennt die alleinige Führung', () => {
@@ -310,7 +310,7 @@ describe('ceremonyPodium', () => {
 
   it('ist ohne jede Medaille leer', () => {
     const none = invalid('GER', 'AUT', 'FRA', 'ITA');
-    expect(ceremonyPodium(play(none, none, none, none))).toEqual([]);
+    expect(ceremonyPodium(play(...COMPETITION_ORDER.map(() => none)))).toEqual([]);
     expect(ceremonyPodium(fixed())).toEqual([]);
   });
 

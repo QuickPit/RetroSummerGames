@@ -27,6 +27,8 @@ const DISCIPLINES = {
   swim: { scene: 'swim' },
   wettkampf: { competition: true },
 };
+/** Disziplinen im Wettkampf (COMPETITION_ORDER) */
+const EVENT_COUNT = 5;
 const BOT_OF_SCENE = { race: 'hurdles', polevault: 'pole', longjump: 'long', bmx: 'bmx', swim: 'swim' };
 
 // ---------------------------------------------------------------- Bot im Browser
@@ -389,7 +391,8 @@ async function runCompetition(browser) {
     await shot('1-intro');
 
     const order = [];
-    for (let i = 0; i < 4; i++) {
+    const room = () => page.evaluate(async () => (await import('/src/audio/sfx.ts')).sfx.room);
+    for (let i = 0; i < EVENT_COUNT; i++) {
       if (i === 1) {
         // Fall A: ENTER und ESC im selben Bild – es geht weiter, ohne Rückfrage und ohne Restszene
         await pressTogether('Enter', 'Escape');
@@ -402,7 +405,7 @@ async function runCompetition(browser) {
         await page.keyboard.press('Enter');
       }
       await page.waitForFunction(
-        () => ['race', 'polevault', 'longjump', 'bmx'].some((k) => window.__game.scene.isActive(k)),
+        () => ['race', 'polevault', 'longjump', 'swim', 'bmx'].some((k) => window.__game.scene.isActive(k)),
         null,
         { timeout: 15_000 },
       );
@@ -457,6 +460,30 @@ async function runCompetition(browser) {
         check(t1 - t0 < 0.25, `Zeitsprung nach NEIN: ${t0.toFixed(3)} → ${t1.toFixed(3)} s`);
         log.push(`Rückfrage im Rennen: Zeit stand bei ${t0.toFixed(2)} s, danach ${t1.toFixed(2)} s`);
       }
+      if (scene === 'swim') {
+        // Rückfrage mitten im Schwimmrennen: Zeit steht, kein Zeitsprung nach NEIN, kein Fehlstart
+        await page.waitForFunction(() => {
+          const sc = window.__game.scene.getScene('swim');
+          return sc.phase === 'race' && sc.simTime > 6;
+        }, null, { timeout: 20_000 });
+        check((await room()) === 'hall', `Kein Hallenklang beim Schwimmen: ${await room()}`);
+        await page.keyboard.press('Escape');
+        await waitActive('confirm');
+        const t0 = await page.evaluate(() => window.__game.scene.getScene('swim').simTime);
+        await page.waitForTimeout(1000);
+        const mid = await page.evaluate(() => {
+          const sc = window.__game.scene.getScene('swim');
+          return { t: sc.simTime, paused: window.__game.scene.isPaused('swim'), falseStarts: sc.falseStarts };
+        });
+        await page.keyboard.press('KeyN');
+        await page.waitForFunction(() => !window.__game.scene.isPaused('swim') && !window.__game.scene.isActive('confirm'), null, {
+          timeout: 5_000,
+        });
+        const t1 = await page.evaluate(() => window.__game.scene.getScene('swim').simTime);
+        check(mid.paused && mid.t === t0 && mid.falseStarts === 0, `Schwimmen läuft während der Rückfrage weiter: ${JSON.stringify(mid)}`);
+        check(t1 - t0 < 0.25, `Zeitsprung nach NEIN (Schwimmen): ${t0.toFixed(3)} → ${t1.toFixed(3)} s`);
+        log.push(`Rückfrage beim Schwimmen: Zeit stand bei ${t0.toFixed(2)} s, danach ${t1.toFixed(2)} s`);
+      }
       const r = await botRun;
       for (const line of r.log) log.push(`${bot}: ${line}`);
       check(r.ok, `Bot ${bot} hat die Siegerehrung nicht erreicht`);
@@ -473,7 +500,8 @@ async function runCompetition(browser) {
         const champ = pv.rows.find((row) => row.code === pv.champ);
         check(champ && champ.valid, `Champion ${pv.champ} ohne gültige Höhe`);
       }
-      const mode = i < 3 ? 'between' : 'final';
+      if (scene === 'swim') check((await room()) === 'hall', 'Siegerehrung Schwimmen ohne Hallenklang');
+      const mode = i < EVENT_COUNT - 1 ? 'between' : 'final';
       if (i === 0) {
         // Fall B: ENTER und ESC im selben Bild in der Siegerehrung
         await pressTogether('Enter', 'Escape');
@@ -488,6 +516,7 @@ async function runCompetition(browser) {
       }
       await page.waitForTimeout(600);
       await shot(`${2 + i}-${bot}-${mode}`);
+      check((await room()) === 'open', `Hallenklang im Medaillenspiegel nach ${scene}: ${await room()}`);
 
       if (i === 0) {
         // Einmal abbrechen wollen und mit N weitermachen
@@ -517,7 +546,7 @@ async function runCompetition(browser) {
         log.push('Rückfrage: ESC öffnet sie, N setzt fort (auch bei ESC+ENTER im selben Bild)');
       }
     }
-    check(order.join(',') === 'race,longjump,polevault,bmx', `Falsche Reihenfolge: ${order.join(',')}`);
+    check(order.join(',') === 'race,longjump,polevault,swim,bmx', `Falsche Reihenfolge: ${order.join(',')}`);
     log.push(`Reihenfolge: ${order.join(' → ')}`);
 
     const final = await page.evaluate(() => {
@@ -527,7 +556,7 @@ async function runCompetition(browser) {
     for (const r of final.table) log.push(`${r.rank}. ${r.code}  G${r.gold} S${r.silver} B${r.bronze}`);
     log.push(`Gesamtsieger: ${final.winners.length ? final.winners.join(', ') : 'keiner'}`);
     const medals = final.table.reduce((n, r) => n + r.total, 0);
-    check(medals > 0 && medals <= 12, `Unplausible Medaillenzahl ${medals}`);
+    check(medals > 0 && medals <= 3 * EVENT_COUNT, `Unplausible Medaillenzahl ${medals}`);
 
     // Endstand → Abschlussfeier: Podest wie im Spiegel, keine wachsende Objektzahl, ENTER führt ins Menü.
     // Doppeltes ENTER (20 ms Abstand) darf die Feier nicht überspringen (Eingabesperre zu Beginn).
@@ -567,7 +596,7 @@ async function runCompetition(browser) {
     check(JSON.stringify(c1.podium) === JSON.stringify(expected), `Podest ${JSON.stringify(c1.podium)} ≠ Spiegel ${JSON.stringify(expected)}`);
     log.push(`Abschlussfeier: Podest ${c1.podium.map((p) => `${p.rank}. ${p.codes.join('/')}`).join(', ') || 'leer'}`);
     await page.waitForTimeout(2000);
-    await shot('6-ceremony');
+    await shot(`${2 + EVENT_COUNT}-ceremony`);
     const c2 = await ceremony();
     check(c2.children === c1.children, `Objektzahl wächst in der Feier: ${c1.children} → ${c2.children}`);
     check(c2.elapsed > c1.elapsed, 'Abschlussfeier läuft nicht');
