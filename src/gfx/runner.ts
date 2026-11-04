@@ -108,6 +108,11 @@ export function createLook(country: Country, seed: number, number: number): Runn
   };
 }
 
+/** Kampfrichter: Blazer, weiße Hose, dunkle Schuhe, kein Stirnband (Weitsprung, Turmspringen) */
+export function judgeLook(base: RunnerLook): RunnerLook {
+  return { ...base, jersey: 0x24346b, shorts: 0xf0f0f0, accent: 0xf7d038, headband: false, shoe: 0x2a2a30 };
+}
+
 // ------------------------------------------------------------------ Posen
 
 function legAt(phase: number, amp: number): Limb {

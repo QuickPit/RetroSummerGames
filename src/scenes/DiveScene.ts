@@ -18,7 +18,6 @@ import {
   drawJudge,
   flatPose,
   glidePose,
-  judgeLook,
   linePose,
   positionPose,
   splashDrops,
@@ -26,10 +25,20 @@ import {
   twistPose,
   type JudgeReaction,
 } from '../gfx/diver';
-import { CARD_STEP, CARD_STRIKE, DiveHud, DiveSelect, JudgeCards, VerdictBoard, drawTaktScale, type DiveSelectRow } from '../gfx/diveHud';
+import {
+  CARD_STEP,
+  CARD_STRIKE,
+  DiveHud,
+  DiveSelect,
+  JudgeCards,
+  VerdictBoard,
+  drawTaktScale,
+  halvesLabel,
+  type DiveSelectRow,
+} from '../gfx/diveHud';
 import { JumpBoard, type JumpBoardRow } from '../gfx/jumpBoard';
-import { DIVE_HALL, DiveHall, diveScreenY, poolLeftAt } from '../gfx/pool';
-import { createLook, type Mood, type Pose, type RunnerLook } from '../gfx/runner';
+import { DIVE_HALL, DiveHall, diveScreenY, poolLeftAt } from '../gfx/diveHall';
+import { createLook, fillQuad, judgeLook, type Mood, type Pose, type RunnerLook } from '../gfx/runner';
 import { drawDrops, drawWaterRing, type Drop } from '../gfx/swimmer';
 import type { Side } from '../sim/hurdles';
 import {
@@ -87,6 +96,10 @@ const TOWER_MSG = { x: 430, y: 44 };
 const POOL_MSG = { x: GAME_WIDTH / 2, y: 136 };
 /** Hüfte bis Kopfmitte in Pixeln (ungedreht, ohne Vergrößerung) */
 const BODY_TO_HEAD = 21;
+/** Mehr Sim-Zeit holt ein Bild nicht nach (verdeckter Tab, langer Ruckler) – sonst flöge der Springer ungesehen */
+const MAX_CATCHUP = 0.25;
+/** Hinweis am Turm, bis ein Sprung einmal geöffnet eingetaucht ist */
+const HOLD_HINT = 'LEERTASTE HALTEN = SALTO, LOS = ÖFFNEN';
 
 type Phase = 'board' | 'select' | 'attempt';
 
@@ -141,8 +154,31 @@ function verdictTitle(j: Judgement, def: DiveDef): { text: string; color: string
   return { text: 'MISSGLÜCKT', color: '#f08a24' };
 }
 
-function tipText(tip: DiveTip, j: Judgement | null): string {
+/** Rat zum Feinschliff, wenn der Sprung schon sehr gut war (Basisnote ab 8) – keine Kritik */
+function polishText(tip: DiveTip): string | null {
   switch (tip) {
+    case 'moreHeight':
+      return 'FEINSCHLIFF: SCHNELLER TIPPEN = MEHR HÖHE';
+    case 'takeoffEarly':
+    case 'takeoffLate':
+      return 'FEINSCHLIFF: GENAU IM HOCHPUNKT ABSPRINGEN';
+    case 'openEarly':
+      return 'FEINSCHLIFF: EINEN TICK LÄNGER HALTEN';
+    case 'openLate':
+      return 'FEINSCHLIFF: EINEN TICK FRÜHER LOSLASSEN';
+    default:
+      return null;
+  }
+}
+
+function tipText(tip: DiveTip, j: Judgement | null): string {
+  if (j && j.base >= 8) {
+    const polish = polishText(tip);
+    if (polish) return polish;
+  }
+  switch (tip) {
+    case 'missedTakeoff':
+      return 'ABSPRUNG VERPASST – LEERTASTE, WENN ARME OBEN';
     case 'notOpened':
       return 'NICHT GEÖFFNET – LEERTASTE VOR DEM WASSER LOS';
     case 'lowPower':
@@ -177,6 +213,19 @@ function tipText(tip: DiveTip, j: Judgement | null): string {
 
 function formatPoints(p: number): string {
   return p.toFixed(2);
+}
+
+/** Messwerte der Wertung; bei falscher Saltozahl oder nicht geöffnet zählt die Drehung, sonst der Eintauchwinkel */
+function measuresText(j: Judgement, def: DiveDef): string {
+  const head = `ABSPRUNG ${Math.round(j.quality * 100)}%   SCHWUNG ${Math.round(j.swing * 100)}%`;
+  if (j.rating === 'wrong' || j.rating === 'bomb') {
+    const target = targetRot(def);
+    const halves = Math.max(0, Math.floor((target + j.delta + 1) / 180));
+    return `${head}   DREHUNG ${halvesLabel(halves)}/${halvesLabel(Math.round(target / 180))}`;
+  }
+  // Abweichung auf −180°…180° bringen (eine ganze Umdrehung zu viel ist kein Winkelfehler)
+  const angle = Math.abs((((j.delta + 180) % 360) + 360) % 360 - 180);
+  return `${head}   EINTAUCHEN ${Math.round(angle)}°`;
 }
 
 export class DiveScene extends Phaser.Scene {
@@ -225,6 +274,10 @@ export class DiveScene extends Phaser.Scene {
   private dripAt = 0;
   /** Tipps der eigenen Sprünge für die Notiz im Ergebnis */
   private tips: DiveTip[] = [];
+  /** Nötiger Schwung des laufenden Sprungs (einmal je Versuch berechnet) */
+  private minPow = 0;
+  /** Hat der Spieler schon einmal geöffnet eingetaucht? Bis dahin steht am Turm der Halte-Hinweis */
+  private openedOnce = false;
 
   constructor() {
     super('dive');
@@ -249,6 +302,9 @@ export class DiveScene extends Phaser.Scene {
     this.lastSwing = null;
     this.judgeReact = null;
     this.tips = [];
+    this.dripAt = 0;
+    this.shakeDir = 1;
+    this.openedOnce = false;
   }
 
   /** Aktuelle Sim-Zeit des Versuchs in Sekunden */
@@ -271,6 +327,7 @@ export class DiveScene extends Phaser.Scene {
     this.hud = new DiveHud(this);
     this.verdict = new VerdictBoard(this);
     this.board = new JumpBoard(this, 'TURMSPRINGEN 10 M', 4, DIVE.rounds, 'GESAMT');
+    this.board.bgAlpha = 1;
     this.selectPanel = new DiveSelect(this);
     this.setupEntrants();
 
@@ -417,6 +474,7 @@ export class DiveScene extends Phaser.Scene {
     // Sprungansage: blinkt kurz auf der Hallentafel, die rechts oben weit weg von der Flugbahn hängt
     this.hall.setBoard(this.player.country.name, def.name, true);
     this.diver = createDive(def);
+    this.minPow = minPower(def);
     this.judgement = null;
     this.verdictReady = false;
     this.surfacedAt = null;
@@ -493,7 +551,10 @@ export class DiveScene extends Phaser.Scene {
     if (this.tips.length) {
       const count = (t: DiveTip) => this.tips.filter((x) => x === t).length;
       const tip = [...DIVE_TIPS].filter((t) => count(t) > 0).sort((a, b) => count(b) - count(a))[0];
-      notes.push(tipText(tip, null));
+      const place = rankDivers(this.competitors()).findIndex((d) => d.isPlayer) + 1;
+      // Sauber gesprungen und trotzdem ohne Medaille: Die Sprünge waren zu leicht
+      if (place > 3 && (tip === 'dream' || tip === 'clean')) notes.push('SAUBER! FÜR EINE MEDAILLE SCHWERERE SPRÜNGE WÄHLEN');
+      else notes.push(tipText(tip, null));
     }
     return notes;
   }
@@ -560,13 +621,16 @@ export class DiveScene extends Phaser.Scene {
       this.hud.registerTap(side, valid, this.elapsed);
       if (valid) sfx.swingWhoosh(s.swing);
     } else if (ev.code === 'Space') {
-      if (s.phase === 'air') setHold(s, true, t);
-      else if (s.phase === 'walk' || s.phase === 'ready') {
+      if (s.phase === 'walk' || s.phase === 'ready') {
         this.flash('ERST SCHWUNG HOLEN!', '', '#e8442e', 1, 16, TOWER_MSG);
         this.hud.registerMiss(this.elapsed);
-      } else if (s.phase === 'swing') takeoff(s, t);
+      } else if (!takeoff(s, t)) {
+        // Die Phase gilt zum Zeitstempel: Lag der automatische Absprung davor, beginnt die Taste das Halten
+        setHold(s, true, t);
+      }
     } else if (up) {
-      if (s.phase === 'air' && !twist(s, t)) this.hud.registerUpMiss(this.elapsed);
+      // twist() rückt die Sim bis zum Zeitstempel vor – erst danach steht fest, ob er schon fliegt
+      if (!twist(s, t) && s.phase === 'air') this.hud.registerUpMiss(this.elapsed);
     }
   }
 
@@ -598,14 +662,16 @@ export class DiveScene extends Phaser.Scene {
       const def = s.def;
       this.hud.setMessage(
         def.name,
-        `SG ${def.dd.toFixed(1)}   NÖTIGER SCHWUNG ${Math.round(minPower(def) * 100)}%\n\nPFEIL LINKS/RECHTS: SCHWUNG HOLEN\nLEERTASTE, WENN DIE ARME OBEN SIND`,
+        `SG ${def.dd.toFixed(1)}   NÖTIGER SCHWUNG ${Math.round(this.minPow * 100)}%\n\nPFEIL LINKS/RECHTS: SCHWUNG HOLEN\nLEERTASTE, WENN DIE ARME OBEN SIND` +
+          (this.openedOnce ? '' : `\n${HOLD_HINT}`),
         '#ffffff',
         16,
         TOWER_MSG.x,
         TOWER_MSG.y,
       );
     } else if (s.phase === 'swing') {
-      this.hud.setMessage('', 'LEERTASTE, WENN DIE ARME OBEN SIND', '#ffffff', 16, TOWER_MSG.x, TOWER_MSG.y + 8);
+      const sub = this.openedOnce ? 'LEERTASTE, WENN DIE ARME OBEN SIND' : `LEERTASTE, WENN DIE ARME OBEN SIND\n${HOLD_HINT}`;
+      this.hud.setMessage('', sub, '#ffffff', 16, TOWER_MSG.x, TOWER_MSG.y + 8);
     } else if (s.phase === 'air') {
       this.hud.setMessage('');
     }
@@ -616,15 +682,19 @@ export class DiveScene extends Phaser.Scene {
     this.elapsed += dt;
     const s = this.diver;
     if (this.phase === 'attempt' && s) {
-      // Fester Zeitschritt bis zur aktuellen Sim-Zeit
-      const target = this.simTime;
+      // Fester Zeitschritt bis zur aktuellen Sim-Zeit; nach einem verdeckten Tab nicht nachholen, sondern den Anker verschieben
+      let target = this.simTime;
+      if (target - s.time > MAX_CATCHUP) {
+        this.anchor += (target - s.time - SIM_DT) * 1000;
+        target = this.simTime;
+      }
       while (s.time + SIM_DT <= target) {
         for (const e of stepDive(s, SIM_DT)) this.handleEvent(s, e);
       }
       this.updateHint(s);
       if (this.surfacedAt !== null && !this.verdict.visible && this.elapsed - this.surfacedAt >= VERDICT_DELAY) this.showVerdict();
       this.verdict.update(this.elapsed);
-      this.hud.update(this.elapsed, s, minPower(s.def));
+      this.hud.update(this.elapsed, s, this.minPow);
     } else if (this.phase === 'board') {
       this.board.update(this.elapsed);
     } else {
@@ -687,6 +757,7 @@ export class DiveScene extends Phaser.Scene {
   private onEntry(s: DiveState): void {
     const j = judge(s);
     this.judgement = j;
+    if (j.rating !== 'bomb' && !j.fail) this.openedOnce = true;
     this.entryX = this.hipScreenX(s);
     this.entryAt = this.elapsed;
     this.drops.push(...splashDrops(j.splash, this.entryX));
@@ -732,7 +803,7 @@ export class DiveScene extends Phaser.Scene {
         dd: j.dd,
         points: j.points,
         tip: tipText(j.tip, j),
-        measures: `ABSPRUNG ${Math.round(j.quality * 100)}%   SCHWUNG ${Math.round(j.swing * 100)}%   EINTAUCHEN ${Math.round(Math.abs(j.delta))}°`,
+        measures: measuresText(j, s.def),
       },
       this.elapsed,
     );
@@ -753,12 +824,13 @@ export class DiveScene extends Phaser.Scene {
     g.clear();
     if (this.camY > 170) return;
     const react = this.judgeReact;
-    DIVE_HALL.judgeX.forEach((x, i) => {
+    for (let i = 0; i < DIVE_HALL.judgeX.length; i++) {
       // Leicht versetzt, damit nicht alle gleichzeitig nicken
       const age = react ? this.elapsed - react.at - i * 0.07 : -1;
       const r: JudgeReaction | null = react && age >= 0 ? { kind: react.kind, age } : null;
+      const x = DIVE_HALL.judgeX[i];
       drawJudge(g, x, DIVE_HALL.judgeSeatY + this.camY, this.officials[i], this.cards.raise(i, this.elapsed), this.elapsed + i, r);
-    });
+    }
   }
 
   private drawDiverAndWater(dt: number): void {
@@ -776,16 +848,9 @@ export class DiveScene extends Phaser.Scene {
 
     // Wasser vor dem Springer: Teile unter der Oberfläche wirken bläulich
     if (waterY < 360) {
+      const nearY = DIVE_HALL.poolNearY + this.camY;
       w.fillStyle(COLORS.water, 0.38);
-      w.fillPoints(
-        [
-          new Phaser.Math.Vector2(poolLeftAt(DIVE_HALL.waterY), waterY),
-          new Phaser.Math.Vector2(GAME_WIDTH, waterY),
-          new Phaser.Math.Vector2(GAME_WIDTH, DIVE_HALL.poolNearY + this.camY),
-          new Phaser.Math.Vector2(poolLeftAt(DIVE_HALL.poolNearY), DIVE_HALL.poolNearY + this.camY),
-        ],
-        true,
-      );
+      fillQuad(w, poolLeftAt(DIVE_HALL.waterY), waterY, GAME_WIDTH, waterY, GAME_WIDTH, nearY, poolLeftAt(DIVE_HALL.poolNearY), nearY);
     }
 
     // Spritzer und Tropfen
@@ -795,7 +860,10 @@ export class DiveScene extends Phaser.Scene {
       d.h += d.vh * dt;
       d.vh -= 220 * dt;
     }
-    this.drops = this.drops.filter((d) => d.life > 0 && d.h > -1);
+    // Verbrauchte Tropfen an Ort und Stelle entfernen
+    let n = 0;
+    for (const d of this.drops) if (d.life > 0 && d.h > -1) this.drops[n++] = d;
+    this.drops.length = n;
     if (s?.rating) drawEntrySplash(fx, this.entryX, waterY, s.splash, t - this.entryAt, t);
     drawDrops(fx, this.drops, 0, waterY);
   }

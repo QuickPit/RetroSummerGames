@@ -3,7 +3,7 @@ import { COLORS, FONT, GAME_WIDTH } from '../config';
 import type { Side } from '../sim/hurdles';
 import { DIVE, DIVES, armLift, targetRot, twistProgress, type DiveDef, type DiveState } from '../sim/dive';
 import { BOTTOM_Y, drawActionKey, drawKeyCaps, drawSpeedBar, drawUpKey } from './hud';
-import { DIVE_HALL, drawLedBoard } from './pool';
+import { DIVE_HALL, drawLedBoard } from './diveHall';
 
 // Anzeigen beim Turmspringen: HUD unten und oben, Takt-Skala am Turm, Kampfrichter-Tafeln,
 // Wertung auf der Anzeigetafel und das Panel zur Sprungwahl.
@@ -15,6 +15,14 @@ export function halvesLabel(halves: number): string {
   const whole = Math.floor(halves / 2);
   if (halves % 2 === 0) return String(whole);
   return whole === 0 ? '½' : `${whole}½`;
+}
+
+/** Text und Farbe nur bei Änderung setzen – setText/setColor zeichnen die Schrift-Textur neu */
+function setTextIf(t: Phaser.GameObjects.Text, text: string): void {
+  if (t.text !== text) t.setText(text);
+}
+function setColorIf(t: Phaser.GameObjects.Text, color: string): void {
+  if (t.style.color !== color) t.setColor(color);
 }
 
 const UP_X = 312;
@@ -30,6 +38,7 @@ export class DiveHud {
   private readonly ddText: Phaser.GameObjects.Text;
   private readonly totalText: Phaser.GameObjects.Text;
   private readonly minText: Phaser.GameObjects.Text;
+  private readonly swingLabel: Phaser.GameObjects.Text;
   private readonly actionText: Phaser.GameObjects.Text;
   private readonly twistLabel: Phaser.GameObjects.Text;
   private readonly twistCount: Phaser.GameObjects.Text;
@@ -56,7 +65,7 @@ export class DiveHud {
       .text(GAME_WIDTH - 8, 4, '0.00', { ...style, fontSize: '16px' })
       .setOrigin(1, 0)
       .setDepth(201);
-    const swingLabel = text(8, BOTTOM_Y + 6, 'SCHWUNG');
+    this.swingLabel = text(8, BOTTOM_Y + 6, 'SCHWUNG');
     this.minText = text(0, BOTTOM_Y + 6, 'MIN').setOrigin(0.5, 0);
     this.actionText = text(269, BOTTOM_Y + 6, 'SPRUNG', '#9aa0b8').setOrigin(0.5, 0);
     this.twistLabel = text(UP_X, BOTTOM_Y + 6, 'SCHRAUBE');
@@ -87,7 +96,7 @@ export class DiveHud {
       .setOrigin(0.5, 0)
       .setDepth(210);
     this.all = [
-      this.g, title, this.roundText, this.nameText, this.ddText, totalLabel, this.totalText, swingLabel, this.minText,
+      this.g, title, this.roundText, this.nameText, this.ddText, totalLabel, this.totalText, this.swingLabel, this.minText,
       this.actionText, this.twistLabel, this.twistCount, rotLabel, this.rotText,
     ];
   }
@@ -98,10 +107,10 @@ export class DiveHud {
 
   /** Kopfzeile: Durchgang, Sprung, SG und eigene Gesamtpunkte */
   setInfo(round: number, def: DiveDef | null, total: number): void {
-    this.roundText.setText(`${round}. SPRUNG`);
-    this.nameText.setText(def?.name ?? '');
-    this.ddText.setText(def ? `SG ${def.dd.toFixed(1)}` : '');
-    this.totalText.setText(total.toFixed(2));
+    setTextIf(this.roundText, `${round}. SPRUNG`);
+    setTextIf(this.nameText, def?.name ?? '');
+    setTextIf(this.ddText, def ? `SG ${def.dd.toFixed(1)}` : '');
+    setTextIf(this.totalText, total.toFixed(2));
   }
 
   /**
@@ -137,7 +146,8 @@ export class DiveHud {
   update(now: number, s: DiveState | null, minPower: number): void {
     const g = this.g;
     g.clear();
-    g.fillStyle(COLORS.hudBg, 0.75);
+    // Deckend: Turm und Plattformen sollen nicht durch die Leisten scheinen
+    g.fillStyle(COLORS.hudBg, 1);
     g.fillRect(0, 0, GAME_WIDTH, 24);
     g.fillRect(0, BOTTOM_Y, GAME_WIDTH, 360 - BOTTOM_Y);
     g.fillStyle(COLORS.yellow, 1);
@@ -162,8 +172,8 @@ export class DiveHud {
     }
     if (now < this.missUntil) drawActionKey(g, true, COLORS.red);
     else drawActionKey(g, lit);
-    if (this.actionText.text !== label) this.actionText.setText(label);
-    this.actionText.setColor(lit ? '#ffffff' : '#9aa0b8');
+    setTextIf(this.actionText, label);
+    setColorIf(this.actionText, lit ? '#ffffff' : '#9aa0b8');
 
     this.drawTwist(g, s, now);
     this.drawRotation(g, s);
@@ -176,8 +186,10 @@ export class DiveHud {
     g.fillStyle(0xffffff, 1);
     g.fillRect(x, BOTTOM_Y + 16, 1, 17);
     g.fillTriangle(x - 2, BOTTOM_Y + 14, x + 2, BOTTOM_Y + 14, x, BOTTOM_Y + 17);
-    // Beschriftung nur, wenn sie nicht in „SCHWUNG“ hineinläuft
-    this.minText.setX(x).setVisible(x - 12 > 66 && minPower <= 1);
+    // Bei leichten Sprüngen steht MIN links im Balkenkopf, „SCHWUNG“ rückt dann hinter den Strich
+    const crowded = x - 12 < 70;
+    this.minText.setX(x).setVisible(minPower <= 1);
+    this.swingLabel.setX(crowded ? x + 16 : 8);
   }
 
   private drawTwist(g: Gfx, s: DiveState | null, now: number): void {
@@ -185,9 +197,10 @@ export class DiveHud {
     const active = twists > 0;
     const red = now < this.upMissUntil;
     drawUpKey(g, UP_X, red || (s?.twistStart != null), red ? COLORS.red : COLORS.yellow);
-    this.twistLabel.setColor(active ? '#ffffff' : '#5d6278');
+    setColorIf(this.twistLabel, active ? '#ffffff' : '#5d6278');
     const done = s ? Math.floor(twistProgress(s)) : 0;
-    this.twistCount.setText(active ? `${done}/${twists}` : '-').setColor(active ? '#f7d038' : '#5d6278');
+    setTextIf(this.twistCount, active ? `${done}/${twists}` : '-');
+    setColorIf(this.twistCount, active ? '#f7d038' : '#5d6278');
   }
 
   private drawRotation(g: Gfx, s: DiveState | null): void {
@@ -196,7 +209,7 @@ export class DiveHud {
     g.fillStyle(0x2a2e40, 1);
     g.fillRect(ROT_X0, y, w, 12);
     if (!s) {
-      this.rotText.setText('');
+      setTextIf(this.rotText, '');
       return;
     }
     const target = targetRot(s.def);
@@ -214,7 +227,7 @@ export class DiveHud {
     g.fillStyle(0xffffff, 1);
     g.fillRect(ROT_X1 - 1, y - 3, 2, 18);
     const halves = Math.max(0, Math.floor((rot + 1) / 180));
-    this.rotText.setText(`${halvesLabel(halves)}/${halvesLabel(Math.round(target / 180))}`);
+    setTextIf(this.rotText, `${halvesLabel(halves)}/${halvesLabel(Math.round(target / 180))}`);
   }
 }
 
@@ -303,22 +316,25 @@ export class JudgeCards {
     this.strikeG.clear();
     if (this.shownAt === null) return;
     const struck = this.done(now);
-    DIVE_HALL.judgeX.forEach((cx, i) => {
+    for (let i = 0; i < DIVE_HALL.judgeX.length; i++) {
+      const cx = DIVE_HALL.judgeX[i];
       const k = this.raise(i, now);
       const t = this.texts[i];
       if (k <= 0) {
         t.setVisible(false);
-        return;
+        continue;
       }
       const y = Math.round(CARD_Y + (1 - k) * 16 + camY);
       const grey = struck && this.dropped.includes(i);
       drawJudgeCard(g, cx, y, grey);
-      t.setVisible(true).setPosition(cx + 1, y + 1).setText(noteLabel(this.notes[i])).setColor(grey ? '#5d6278' : '#10101c');
+      t.setVisible(true).setPosition(cx + 1, y + 1);
+      setTextIf(t, noteLabel(this.notes[i]));
+      setColorIf(t, grey ? '#5d6278' : '#10101c');
       if (grey) {
         this.strikeG.lineStyle(2, COLORS.red, 1);
         this.strikeG.lineBetween(cx - CARD_W / 2 + 3, y + CARD_H / 2 - 3, cx + CARD_W / 2 - 3, y - CARD_H / 2 + 3);
       }
-    });
+    }
   }
 }
 
@@ -353,17 +369,23 @@ const COUNT_TIME = 0.6;
 
 /** Wertung auf der großen LED-Tafel (DIVE_HALL.verdict) als Overlay; die Punkte zählen hoch. */
 export class VerdictBoard {
-  private readonly g: Gfx;
+  private readonly bg: Phaser.GameObjects.Image;
   private readonly texts: Phaser.GameObjects.Text[];
   private info: VerdictInfo | null = null;
   private shownAt = 0;
+  private counted = false;
 
   constructor(scene: Phaser.Scene) {
     const { x, y, w } = DIVE_HALL.verdict;
     const cx = x + w / 2;
     // Die Tafel liegt vor dem Turm, damit nichts in die Schrift ragt
-    this.g = scene.add.graphics().setDepth(149).setVisible(false);
-    drawLedBoard(this.g, DIVE_HALL.verdict);
+    if (!scene.textures.exists('diveverdict')) {
+      const tg = scene.make.graphics({}, false);
+      drawLedBoard(tg, DIVE_HALL.verdict);
+      tg.generateTexture('diveverdict', GAME_WIDTH, y + DIVE_HALL.verdict.h + 4);
+      tg.destroy();
+    }
+    this.bg = scene.add.image(0, 0, 'diveverdict').setOrigin(0).setDepth(149).setVisible(false);
     const t = (dy: number, size: number, color: string) =>
       scene.add
         .text(cx, y + dy, '', { fontFamily: FONT, fontSize: `${size}px`, color })
@@ -386,20 +408,24 @@ export class VerdictBoard {
     measures.setText(info.measures);
     enter.setText('ENTER: WEITER');
     for (const t of this.texts) t.setVisible(true);
-    this.g.setVisible(true);
+    this.bg.setVisible(true);
+    this.counted = false;
   }
 
   hide(): void {
     this.info = null;
     for (const t of this.texts) t.setVisible(false);
-    this.g.setVisible(false);
+    this.bg.setVisible(false);
   }
 
   update(now: number): void {
     const info = this.info;
     if (!info) return;
-    const k = Math.min(1, (now - this.shownAt) / COUNT_TIME);
-    this.texts[1].setText(`${info.sum.toFixed(1)} × ${info.dd.toFixed(1)} = ${(info.points * k).toFixed(2)}`);
+    if (!this.counted) {
+      const k = Math.min(1, (now - this.shownAt) / COUNT_TIME);
+      setTextIf(this.texts[1], `${info.sum.toFixed(1)} × ${info.dd.toFixed(1)} = ${(info.points * k).toFixed(2)}`);
+      this.counted = k >= 1;
+    }
     this.texts[4].setAlpha(Math.floor(now * 2.5) % 2 === 0 ? 1 : 0.35);
   }
 }
@@ -482,7 +508,7 @@ export class DiveSelect {
   update(time: number): void {
     const g = this.g;
     g.clear();
-    g.fillStyle(0x10101c, 0.9);
+    g.fillStyle(0x10101c, 1);
     g.fillRect(SEL.x, SEL.y, SEL.w, SEL.h);
     g.lineStyle(1, COLORS.yellow, 1);
     g.strokeRect(SEL.x + 0.5, SEL.y + 0.5, SEL.w - 1, SEL.h - 1);

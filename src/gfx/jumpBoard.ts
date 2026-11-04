@@ -27,6 +27,8 @@ export class JumpBoard {
   private readonly footer: Phaser.GameObjects.Text;
   private readonly footer2: Phaser.GameObjects.Text;
   private rows: JumpBoardRow[] = [];
+  /** Deckkraft des Hintergrunds (Turmspringen: deckend, damit die Hallentafel nicht durchscheint) */
+  bgAlpha = 0.88;
 
   /** `bestHeader`: Kopf der letzten Spalte, z. B. 'GESAMT' beim Turmspringen */
   constructor(scene: Phaser.Scene, title: string, rowCount: number, rounds: number, bestHeader = 'BEST') {
@@ -78,7 +80,7 @@ export class JumpBoard {
   update(time: number): void {
     const g = this.g;
     g.clear();
-    g.fillStyle(0x10101c, 0.88);
+    g.fillStyle(0x10101c, this.bgAlpha);
     g.fillRect(60, 42, GAME_WIDTH - 120, 232);
     g.lineStyle(1, COLORS.yellow, 1);
     g.strokeRect(60.5, 42.5, GAME_WIDTH - 121, 231);

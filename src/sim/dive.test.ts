@@ -4,6 +4,7 @@ import {
   DIVE,
   DIVES,
   DIVE_CPU_PROFILES,
+  DIVE_TIPS,
   cpuDiveRate,
   createDive,
   createDiver,
@@ -362,6 +363,28 @@ describe('Eintauchen', () => {
     const slow = jumpOff(diveById('15h'), { rate: 8 });
     fly(slow, releaseFor(slow));
     expect(judge(slow).tip).toBe('moreHeight');
+  });
+
+  it('meldet nach dem automatischen Absprung nur den verpassten Absprung', () => {
+    const s = toReady(diveById('25h'));
+    tapUntil(s, 11, s.time + DIVE.maxSwingTime + 0.1);
+    expect(s.autoTakeoff).toBe(true);
+    // Der Spieler drückt danach und öffnet nicht mehr – trotzdem kein Tipp zum Öffnen
+    setHold(s, true, s.time);
+    fly(s, null);
+    const j = judge(s);
+    expect(j.rating).toBe('bomb');
+    expect(j.tip).toBe('missedTakeoff');
+    expect(DIVE_TIPS[0]).toBe('missedTakeoff');
+  });
+
+  it('öffnet exakt zum Zeitstempel, auch zwischen zwei Schritten', () => {
+    const s = jumpOff(diveById('25h'));
+    stepDive(s, DT);
+    const t = s.time + DT * 0.37;
+    setHold(s, false, t);
+    expect(s.openAt).toBe(t);
+    expect(s.held).toBe(false);
   });
 });
 

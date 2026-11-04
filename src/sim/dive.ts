@@ -436,6 +436,7 @@ export function twistProgress(s: DiveState): number {
 
 /** Tipps in der Reihenfolge ihrer Priorität (der erste zutreffende wird angezeigt) */
 export const DIVE_TIPS = [
+  'missedTakeoff',
   'notOpened',
   'lowPower',
   'wrongShort',
@@ -501,6 +502,8 @@ export function baseScore(s: DiveState): number {
 
 function diveTip(s: DiveState, base: number): DiveTip {
   const d = s.delta;
+  // Ohne eigenen Absprung sagen Tipps zu Öffnen oder Salto nichts – erst den Absprung treffen
+  if (s.autoTakeoff) return 'missedTakeoff';
   if (s.rating === 'bomb') return 'notOpened';
   if (d < -DIVE.cleanAngle && s.power < minPower(s.def)) return 'lowPower';
   if (s.rating === 'wrong') return d < 0 ? 'wrongShort' : 'wrongLong';

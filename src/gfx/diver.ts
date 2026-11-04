@@ -505,11 +505,6 @@ export function drawBubbles(g: Gfx, x: number, y: number, time: number, count: n
 
 // ---------------------------------------------------------- Kampfrichter
 
-/** Look der Kampfrichter: Blazer und weiße Hose wie der Offizielle im Weitsprung */
-export function judgeLook(base: RunnerLook): RunnerLook {
-  return { ...base, jersey: 0x24346b, shorts: 0xf0f0f0, accent: 0xf7d038, headband: false, shoe: 0x2a2a30 };
-}
-
 /** Reaktion eines Kampfrichters auf das Eintauchen; `age` in Sekunden */
 export interface JudgeReaction {
   kind: 'nod' | 'shake';

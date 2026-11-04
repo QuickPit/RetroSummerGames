@@ -48,6 +48,8 @@ import { confirmAbort, confirmPending } from './ConfirmScene';
 import type { ResultCell, ResultRow, ResultSceneData } from './ResultScene';
 
 const SIM_DT = 1 / 120;
+/** Mehr Rennzeit holt ein Bild nicht nach (verdeckter Tab, langer Ruckler) */
+const MAX_CATCHUP = 0.25;
 const PLAYER_LANE = 2;
 /** Wie lange nach dem eigenen Anschlag noch weitergeschwommen wird */
 const AFTER_FINISH = 4;
@@ -112,6 +114,8 @@ export class SwimScene extends Phaser.Scene {
   private phase: Phase = 'ready';
   /** performance.now() beim Startsignal */
   private gunAt = 0;
+  /** performance.now() des Startsignals für die Fehlstart-Prüfung (gunAt wandert beim Nachholen-Stopp mit) */
+  private signalAt = 0;
   private simTime = 0;
   private phaseTimer = 0;
   private setDelay = 0;
@@ -213,7 +217,10 @@ export class SwimScene extends Phaser.Scene {
     if (ev.code === 'Escape') {
       // Im Wettkampf mit Rückfrage; die Rennzeit läuft währenddessen nicht weiter
       if (competition) {
-        if (!this.resultsShown) confirmAbort(this, (ms) => (this.gunAt += ms));
+        if (!this.resultsShown) confirmAbort(this, (ms) => {
+          this.gunAt += ms;
+          this.signalAt += ms;
+        });
       } else this.scene.start('title');
       return;
     }
@@ -246,7 +253,7 @@ export class SwimScene extends Phaser.Scene {
           return;
         }
         // Vor dem Signal gedrückt, aber erst jetzt verarbeitet: Fehlstart statt Reaktion 0.00
-        if ((side || isAction) && ev.timeStamp > 0 && ev.timeStamp < this.gunAt) {
+        if ((side || isAction) && ev.timeStamp > 0 && ev.timeStamp < this.signalAt) {
           this.falseStart();
           return;
         }
@@ -348,6 +355,7 @@ export class SwimScene extends Phaser.Scene {
   private fireSignal(): void {
     this.phase = 'race';
     this.gunAt = performance.now();
+    this.signalAt = this.gunAt;
     this.simTime = 0;
     this.flash('LOS!', '', '#f7d038', 0.7);
     sfx.startBeep();
@@ -375,7 +383,12 @@ export class SwimScene extends Phaser.Scene {
   }
 
   private updateRace(): void {
-    const target = (performance.now() - this.gunAt) / 1000;
+    let target = (performance.now() - this.gunAt) / 1000;
+    // Nach einem verdeckten Tab oder langen Ruckler nicht nachholen: Die Rennzeit macht dort weiter, wo sie stand
+    if (target - this.simTime > MAX_CATCHUP) {
+      this.gunAt += (target - this.simTime - SIM_DT) * 1000;
+      target = (performance.now() - this.gunAt) / 1000;
+    }
     // Fixer Zeitschritt: gleiches Ergebnis unabhängig von der Bildrate
     while (this.simTime + SIM_DT <= target) {
       this.simTime += SIM_DT;
