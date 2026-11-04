@@ -14,6 +14,7 @@ import {
 } from './competition';
 import { BMX_CPU_PROFILES } from './bmx';
 import { CPU_PROFILES, createRng } from './cpu';
+import { DIVE_CPU_PROFILES } from './dive';
 import { LJ_CPU_PROFILES } from './longjump';
 import { VAULT_CPU_PROFILES } from './polevault';
 
@@ -250,7 +251,7 @@ describe('Medaillenspiegel – Grenzfälle (QA)', () => {
 
 describe('Profile der Computer-Gegner', () => {
   it('stehen in allen Disziplinen in derselben Reihenfolge (Index aus dem Feld)', () => {
-    for (const list of [CPU_PROFILES, LJ_CPU_PROFILES, VAULT_CPU_PROFILES, BMX_CPU_PROFILES]) {
+    for (const list of [CPU_PROFILES, LJ_CPU_PROFILES, VAULT_CPU_PROFILES, DIVE_CPU_PROFILES, BMX_CPU_PROFILES]) {
       expect(list.map((p) => p.name)).toEqual(['Rookie', 'Profi', 'Champion']);
     }
   });
