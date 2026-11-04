@@ -5,6 +5,7 @@ import { BmxScene } from './scenes/BmxScene';
 import { BootScene } from './scenes/BootScene';
 import { CeremonyScene } from './scenes/CeremonyScene';
 import { ConfirmScene } from './scenes/ConfirmScene';
+import { DiveScene } from './scenes/DiveScene';
 import { LongJumpScene } from './scenes/LongJumpScene';
 import { MedalsScene } from './scenes/MedalsScene';
 import { PoleVaultScene } from './scenes/PoleVaultScene';
@@ -43,6 +44,7 @@ async function start(): Promise<void> {
       LongJumpScene,
       BmxScene,
       SwimScene,
+      DiveScene,
       ResultScene,
       MedalsScene,
       CeremonyScene,

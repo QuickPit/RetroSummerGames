@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
-import { COLORS, FONT, GAME_WIDTH, LANE_COUNT, LANE_DEPTH, PX_PER_M, TRACK_FAR_Y, TRACK_NEAR_Y, laneCenterY, skewAt } from '../config';
+import { COLORS, DEPTH_SKEW, FONT, GAME_WIDTH, LANE_COUNT, LANE_DEPTH, PX_PER_M, TRACK_FAR_Y, TRACK_NEAR_Y, laneCenterY, skewAt } from '../config';
+import { COUNTRIES } from '../data/countries';
 import { createRng } from '../sim/cpu';
 import { SWIM } from '../sim/swim';
+import { drawFlag } from './flags';
 import { canvasTexture, drawCrowdRows } from './textures';
 
 // Schwimmhalle als Kulisse für 100 m Freistil – alles per Canvas bzw. Graphics gemalt.
@@ -69,6 +71,7 @@ export function createPoolTextures(scene: Phaser.Scene): void {
       canvasTexture(scene, `rope${k}_${f}`, POOL_TEX_W, ROPE_TEX_H, (ctx) => drawRopeTexture(ctx, k, f));
     }
   }
+  canvasTexture(scene, 'divewall', 320, DIVE_HALL.wallHeight, drawDiveWall);
 }
 
 // ------------------------------------------------- Vorab gerenderte Becken-Teile
@@ -706,6 +709,399 @@ export class SwimHall {
         g.fillStyle(colors[i % colors.length], 1);
         g.fillTriangle(px - 3, py, px + 3, py, px + flutter, py + 6);
       }
+    }
+  }
+}
+
+// ======================================================= Sprunghalle (Turmspringen)
+
+/**
+ * Lage der Sprunghalle bei Kamera ganz unten (camY = 0). Die Kamera scrollt nur senkrecht:
+ * Wand und Dach mit halber Geschwindigkeit, alles andere (Turm, Becken, Richter) voll.
+ */
+export const DIVE_HALL = {
+  /** Plattformkante (Bildschirm-X) */
+  edgeX: 200,
+  waterY: 232,
+  poolNearY: TRACK_NEAR_Y,
+  standsY: 150,
+  deckY: 198,
+  /** Linke Beckenkante an der Wasserlinie; nach vorne läuft sie schräg wie die Projektion */
+  poolLeftX: 206,
+  /** Oberkante der Hallenwand-Textur (Wand-Koordinaten, Parallaxe 0,5) */
+  wallTop: -110,
+  wallHeight: 370,
+  /** LED-Anzeigetafel; sie hängt vor der Wand (Parallaxe 0,75) und rutscht beim Blick nach oben unter die Plattform */
+  board: { x: 120, y: 34, w: 400, h: 84 },
+  boardParallax: 0.75,
+  /** Kampfrichter: Mitte der Hochstühle und Sitzhöhe */
+  judgeX: [344, 400, 456, 512, 568],
+  judgeSeatY: 216,
+  platforms: [3, 5, 7.5, 10],
+} as const;
+
+/** Bildschirm-Y einer Höhe über dem Wasser (Meter) bei Kamera camY */
+export function diveScreenY(heightM: number, camY: number): number {
+  return DIVE_HALL.waterY + camY - heightM * PX_PER_M;
+}
+
+/** Linke Beckenkante in der Bildschirmzeile y (bei camY = 0) */
+export function poolLeftAt(y: number): number {
+  return DIVE_HALL.poolLeftX - (y - DIVE_HALL.waterY) * DEPTH_SKEW;
+}
+
+/** LED-Anzeigetafel der Sprunghalle: Rahmen, dunkle Fläche, Raster (auch als Overlay für die Wertung) */
+export function drawLedBoard(g: Gfx): void {
+  const { x, y, w, h } = DIVE_HALL.board;
+  g.fillStyle(0x5d6278, 1);
+  g.fillRect(x - 3, y - 3, w + 6, h + 6);
+  g.fillStyle(COLORS.outline, 1);
+  g.fillRect(x - 1, y - 1, w + 2, h + 2);
+  g.fillStyle(0x1a0c0a, 1);
+  g.fillRect(x, y, w, h);
+  g.fillStyle(0x2a1410, 1);
+  for (let yy = y + 2; yy < y + h - 1; yy += 3) {
+    for (let xx = x + 2; xx < x + w - 1; xx += 3) g.fillRect(xx, yy, 1, 1);
+  }
+}
+
+/** Hallenwand: Dachträger mit Lampen, hohe Fensterfront, darunter Sichtbeton */
+function drawDiveWall(ctx: Ctx): void {
+  const W = 320;
+  const H = DIVE_HALL.wallHeight;
+  const y = (wallY: number) => wallY - DIVE_HALL.wallTop;
+  // Decke mit Fachwerkträgern
+  ctx.fillStyle = '#2c3348';
+  ctx.fillRect(0, 0, W, y(-6));
+  ctx.fillStyle = '#3a4258';
+  for (let x = 0; x < W; x += 40) {
+    for (let i = 0; i < 20; i++) {
+      ctx.fillRect(x + i, 20 + Math.floor(i * 1.6), 2, 1);
+      ctx.fillRect(x + 20 + i, 52 - Math.floor(i * 1.6), 2, 1);
+    }
+  }
+  ctx.fillRect(0, 18, W, 3);
+  ctx.fillRect(0, 52, W, 3);
+  // Hängelampen
+  for (let x = 30; x < W; x += 80) {
+    ctx.fillStyle = '#1c2132';
+    ctx.fillRect(x + 6, 55, 1, 14);
+    ctx.fillStyle = '#5d6278';
+    ctx.fillRect(x, 69, 13, 4);
+    ctx.fillStyle = '#fff6c8';
+    ctx.fillRect(x + 1, 73, 11, 2);
+    ctx.fillStyle = 'rgba(255, 246, 200, 0.12)';
+    ctx.fillRect(x - 6, 75, 25, 10);
+  }
+  // Ringbalken
+  ctx.fillStyle = '#556079';
+  ctx.fillRect(0, y(-14), W, 8);
+  ctx.fillStyle = '#6c7896';
+  ctx.fillRect(0, y(-14), W, 1);
+  // Fensterband
+  ctx.fillStyle = '#d9e1e8';
+  ctx.fillRect(0, y(-6), W, y(136) - y(-6));
+  for (let k = 0; k < 4; k++) {
+    const x0 = 6 + k * 80;
+    const top = y(0);
+    const h = 128;
+    const grd = ctx.createLinearGradient(0, top, 0, top + h);
+    grd.addColorStop(0, '#3f86d6');
+    grd.addColorStop(1, '#c4e8f8');
+    ctx.fillStyle = grd;
+    ctx.fillRect(x0, top, 68, h);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    for (let i = 0; i < 60; i++) ctx.fillRect(x0 + 8 + i * 0.5 + (i > 30 ? 20 : 0), top + 20 + i * 1.5, 3, 1);
+    ctx.fillStyle = '#d9e1e8';
+    for (let x = x0 + 16; x < x0 + 68; x += 17) ctx.fillRect(x, top, 2, h);
+    for (let yy = top + 31; yy < top + h; yy += 32) ctx.fillRect(x0, yy, 68, 2);
+  }
+  // Sichtbeton mit Fugen
+  const base = y(136);
+  ctx.fillStyle = '#b9c4cc';
+  ctx.fillRect(0, base, W, H - base);
+  ctx.fillStyle = '#a6b1ba';
+  for (let yy = base; yy < H; yy += 16) ctx.fillRect(0, yy, W, 1);
+  for (let x = 0; x < W; x += 40) ctx.fillRect(x, base, 1, H - base);
+  ctx.fillStyle = '#d4dde3';
+  ctx.fillRect(0, base, W, 2);
+}
+
+/** Sprunghalle für das Turmspringen: Betonturm, Sprungbecken, Publikum und Richterstühle. */
+export class DiveHall {
+  private readonly wall: Phaser.GameObjects.TileSprite;
+  private readonly stands: Phaser.GameObjects.TileSprite;
+  private readonly deck: Phaser.GameObjects.TileSprite;
+  private readonly water: Phaser.GameObjects.TileSprite;
+  private readonly edge: Phaser.GameObjects.TileSprite;
+  /** Anzeigetafel mit Lauftext in Orange */
+  private readonly boardGfx: Gfx;
+  private readonly boardLines: Phaser.GameObjects.Text[];
+  /** Turm, Umgang links und Richterstühle – einmal gezeichnet, nur verschoben */
+  private readonly tower: Gfx;
+  private readonly chairs: Gfx;
+  /** Sprudel-Kringel auf dem Wasser */
+  private readonly surface: Gfx;
+  private waterTimer = 0;
+  private waterFrame = 0;
+  private crowdTimer = 0;
+  private crowdFrame = 0;
+
+  constructor(scene: Phaser.Scene) {
+    const H = DIVE_HALL;
+    this.wall = scene.add.tileSprite(0, H.wallTop, GAME_WIDTH, H.wallHeight, 'divewall').setOrigin(0).setDepth(-10);
+    this.boardGfx = scene.add.graphics().setDepth(-9);
+    const led = { fontFamily: FONT, color: '#ff6a3c', align: 'center' };
+    this.boardLines = [
+      scene.add.text(GAME_WIDTH / 2, 0, '', { ...led, fontSize: '8px' }).setOrigin(0.5, 0).setDepth(-9),
+      scene.add.text(GAME_WIDTH / 2, 0, '', { ...led, fontSize: '16px' }).setOrigin(0.5, 0).setDepth(-9),
+    ];
+    // Untere Hälfte der Ränge mit Brüstung
+    const standsH = H.deckY - H.standsY;
+    this.stands = scene.add.tileSprite(0, H.standsY, GAME_WIDTH, standsH, 'hallstands0').setOrigin(0).setDepth(-8);
+    this.stands.tilePositionY = HALL.standsHeight - standsH;
+    this.deck = scene.add.tileSprite(0, H.deckY, GAME_WIDTH, H.waterY - H.deckY, 'halldeck').setOrigin(0).setDepth(-7);
+    this.water = scene.add
+      .tileSprite(0, H.waterY, GAME_WIDTH, H.poolNearY - H.waterY, 'water0')
+      .setOrigin(0)
+      .setDepth(-6)
+      .setTint(0x9cb4e8);
+    this.surface = scene.add.graphics().setDepth(-5.5);
+    this.tower = scene.add.graphics().setDepth(-4);
+    this.chairs = scene.add.graphics().setDepth(-3.5);
+    this.edge = scene.add.tileSprite(0, H.poolNearY, GAME_WIDTH, HALL.edgeHeight, 'halledge').setOrigin(0).setDepth(45);
+    this.drawBoard();
+    this.drawTower();
+    this.drawChairs();
+    this.setBoard('TURMSPRINGEN 10 M', '');
+  }
+
+  /** Lauftext der Anzeigetafel (zwei Zeilen) */
+  setBoard(line1: string, line2: string): void {
+    if (this.boardLines[0].text !== line1) this.boardLines[0].setText(line1);
+    if (this.boardLines[1].text !== line2) this.boardLines[1].setText(line2);
+  }
+
+  /** Lauftext ausblenden, solange die Wertung auf der Tafel steht */
+  setBoardTextVisible(visible: boolean): void {
+    for (const t of this.boardLines) t.setVisible(visible);
+  }
+
+  /**
+   * @param camY senkrechte Kamera: 0 = Beckenansicht, größer = weiter oben
+   * @param excitement 0..1 – wie wild das Publikum jubelt
+   */
+  update(camY: number, dt: number, time: number, excitement: number): void {
+    const H = DIVE_HALL;
+    const c = Math.round(camY);
+    const half = Math.round(camY * 0.5);
+    const boardY = Math.round(camY * H.boardParallax);
+    this.wall.y = H.wallTop + half;
+    this.boardGfx.y = boardY;
+    this.boardLines[0].y = H.board.y + 14 + boardY;
+    this.boardLines[1].y = H.board.y + 40 + boardY;
+    this.stands.y = H.standsY + c;
+    this.deck.y = H.deckY + c;
+    this.water.y = H.waterY + c;
+    this.edge.y = H.poolNearY + c;
+    this.tower.y = c;
+    this.chairs.y = c;
+    this.surface.y = c;
+    // Unterhalb des Bildes muss nichts gezeichnet werden
+    const low = H.standsY + c < 360;
+    for (const o of [this.stands, this.deck, this.water, this.edge, this.surface, this.chairs]) o.setVisible(low);
+
+    this.waterTimer += dt;
+    if (this.waterTimer >= 1 / 6) {
+      this.waterTimer = 0;
+      this.waterFrame = (this.waterFrame + 1) % WATER_FRAMES;
+      this.water.setTexture(`water${this.waterFrame}`);
+    }
+    this.water.tilePositionX = time * 3;
+    this.crowdTimer += dt;
+    if (this.crowdTimer >= Phaser.Math.Linear(0.6, 0.1, excitement)) {
+      this.crowdTimer = 0;
+      this.crowdFrame = 1 - this.crowdFrame;
+      this.stands.setTexture(`hallstands${this.crowdFrame}`);
+    }
+    if (low) this.drawSurface(time);
+  }
+
+  private drawBoard(): void {
+    const { x, y, w } = DIVE_HALL.board;
+    const g = this.boardGfx;
+    // Aufhängung
+    g.fillStyle(0x3a4258, 1);
+    g.fillRect(x + 40, y - 30, 2, 27);
+    g.fillRect(x + w - 42, y - 30, 2, 27);
+    drawLedBoard(g);
+  }
+
+  /** Betonturm mit Plattformen 3/5/7,5/10 m, Leiter, Geländer und Fahnen; links davon Fliesenboden */
+  private drawTower(): void {
+    const g = this.tower;
+    const H = DIVE_HALL;
+    const yOf = (m: number) => H.waterY - m * PX_PER_M;
+    // Fliesenboden links vom Becken (bis zur schrägen Beckenkante)
+    const near = H.poolNearY;
+    g.fillStyle(COLORS.tile, 1);
+    g.fillPoints(
+      [
+        new Phaser.Math.Vector2(0, H.waterY),
+        new Phaser.Math.Vector2(poolLeftAt(H.waterY), H.waterY),
+        new Phaser.Math.Vector2(poolLeftAt(near), near),
+        new Phaser.Math.Vector2(0, near),
+      ],
+      true,
+    );
+    g.fillStyle(COLORS.tileGrout, 1);
+    for (let y = H.waterY + 6; y < near; y += 7) g.fillRect(0, y, Math.round(poolLeftAt(y)) - 3, 1);
+    for (let y = H.waterY; y < near; y++) {
+      if (y % 7 === 6) continue;
+      const shift = Math.round(skewAt(y)) % 16;
+      for (let x = shift; x < poolLeftAt(y) - 3; x += 16) g.fillRect(x, y, 1, 1);
+    }
+    // Beckenkante: weißer Rand, dunkle Fuge zum Wasser
+    for (let y = H.waterY; y < near; y++) {
+      const x = Math.round(poolLeftAt(y));
+      g.fillStyle(0xffffff, 1);
+      g.fillRect(x - 3, y, 3, 1);
+      g.fillStyle(0x16406e, 0.6);
+      g.fillRect(x, y, 2, 1);
+    }
+
+    // Vorderer Umgang unter dem HUD
+    g.fillStyle(COLORS.tile, 1);
+    g.fillRect(0, near + HALL.edgeHeight, GAME_WIDTH, 60);
+    g.fillStyle(COLORS.tileGrout, 1);
+    for (let y = near + HALL.edgeHeight + 6; y < near + 68; y += 7) g.fillRect(0, y, GAME_WIDTH, 1);
+    for (let x = 4; x < GAME_WIDTH; x += 16) g.fillRect(x, near + HALL.edgeHeight, 1, 60);
+
+    // Turmschaft aus Sichtbeton, steht hinten auf dem Umgang
+    const coreL = 44;
+    const coreR = 112;
+    const top = yOf(10);
+    const foot = 262;
+    g.fillStyle(COLORS.outline, 1);
+    g.fillRect(coreL - 1, top - 1, coreR - coreL + 2, foot - top + 2);
+    g.fillStyle(0xb4b9c2, 1);
+    g.fillRect(coreL, top, coreR - coreL, foot - top);
+    g.fillStyle(0xc9cdd4, 1);
+    g.fillRect(coreL, top, 6, foot - top);
+    g.fillStyle(0x969ba6, 1);
+    g.fillRect(coreR - 8, top, 8, foot - top);
+    // Schalungsfugen
+    g.fillStyle(0xa4a9b3, 1);
+    for (let y = top + 12; y < foot; y += 13) g.fillRect(coreL + 6, y, coreR - coreL - 14, 1);
+    // Leiter an der Turmvorderseite
+    g.fillStyle(0x7d8492, 1);
+    g.fillRect(coreL + 14, top + 6, 2, foot - top - 10);
+    g.fillRect(coreL + 26, top + 6, 2, foot - top - 10);
+    for (let y = top + 10; y < foot - 4; y += 6) g.fillRect(coreL + 14, y, 14, 1);
+    // Sockel
+    g.fillStyle(0x8e939e, 1);
+    g.fillRect(coreL - 4, foot - 6, coreR - coreL + 8, 6);
+
+    // Plattformen: je höher, desto weiter ragen sie über das Becken
+    const tips: Record<number, number> = { 3: 168, 5: 180, 7.5: 190, 10: H.edgeX };
+    for (const m of H.platforms) {
+      const y = yOf(m);
+      const tip = tips[m];
+      // Geländer hinten
+      g.fillStyle(0x7d8492, 1);
+      g.fillRect(coreR, y - 24, tip - coreR - 14, 2);
+      g.fillRect(coreR, y - 13, tip - coreR - 14, 1);
+      for (let x = coreR + 10; x < tip - 12; x += 18) g.fillRect(x, y - 24, 2, 24);
+      // Platte mit rutschfestem Belag und weißer Kante
+      g.fillStyle(COLORS.outline, 1);
+      g.fillRect(coreR - 2, y - 1, tip - coreR + 3, 10);
+      g.fillStyle(0xa9aeb8, 1);
+      g.fillRect(coreR - 1, y, tip - coreR + 1, 8);
+      g.fillStyle(0x3a6fa8, 1);
+      g.fillRect(coreR - 1, y, tip - coreR + 1, 2);
+      g.fillStyle(0xffffff, 1);
+      g.fillRect(tip - 3, y, 3, 8);
+      g.fillStyle(0x7d8290, 1);
+      g.fillRect(coreR - 1, y + 7, tip - coreR - 2, 1);
+      // Konsole unter der Platte
+      g.fillStyle(0x969ba6, 1);
+      g.fillTriangle(coreR, y + 8, coreR + 24, y + 8, coreR, y + 26);
+      this.drawHeight(g, m, coreL + 38, y - 9);
+    }
+    // Ganz oben: Geländer und Fahnen
+    const y10 = yOf(10);
+    g.fillStyle(0x7d8492, 1);
+    g.fillRect(coreL, y10 - 24, 2, 24);
+    g.fillRect(coreL, y10 - 24, coreR - coreL, 2);
+    COUNTRIES.slice(0, 3).forEach((c, i) => {
+      const px = coreL + 8 + i * 22;
+      g.fillStyle(0xd0d6de, 1);
+      g.fillRect(px, y10 - 74, 1, 50);
+      drawFlag(g, c.flag, px + 1, y10 - 73, 16, 11);
+    });
+  }
+
+  /** Höhenangabe im 3×5-Raster an den Turmschaft gemalt */
+  private drawHeight(g: Gfx, m: number, x: number, y: number): void {
+    const glyphs: Record<string, string> = {
+      '0': '111101101101111',
+      '1': '010110010010111',
+      '3': '111001111001111',
+      '5': '111100111001111',
+      '7': '111001010010010',
+      '.': '000000000000010',
+      M: '101111111101101',
+    };
+    let cx = x;
+    g.fillStyle(COLORS.outline, 0.8);
+    for (const ch of `${m}M`) {
+      const bits = glyphs[ch];
+      for (let i = 0; i < 15; i++) if (bits[i] === '1') g.fillRect(cx + (i % 3), y + Math.floor(i / 3), 1, 1);
+      cx += ch === '.' ? 3 : 4;
+    }
+  }
+
+  /** Hochstühle der Kampfrichter am hinteren Beckenrand */
+  private drawChairs(): void {
+    const g = this.chairs;
+    const H = DIVE_HALL;
+    for (const x of H.judgeX) {
+      const seat = H.judgeSeatY;
+      g.fillStyle(COLORS.outline, 1);
+      g.fillRect(x - 9, seat - 1, 18, 4);
+      g.fillRect(x - 8, seat + 2, 2, H.waterY - 4 - seat);
+      g.fillRect(x + 6, seat + 2, 2, H.waterY - 4 - seat);
+      g.fillRect(x - 11, seat - 16, 3, 16);
+      g.fillStyle(0xe8e8f0, 1);
+      g.fillRect(x - 8, seat, 16, 2);
+      g.fillRect(x - 10, seat - 15, 1, 14);
+      // Fußstütze
+      g.fillStyle(0x7d8492, 1);
+      g.fillRect(x - 7, seat + 9, 14, 1);
+    }
+  }
+
+  /** Sprudel-Kringel: Düsen am Beckenboden rauen die Oberfläche auf */
+  private drawSurface(time: number): void {
+    const g = this.surface;
+    g.clear();
+    const H = DIVE_HALL;
+    for (let i = 0; i < 22; i++) {
+      const h = Math.sin(i * 12.9898) * 43758.5453;
+      const r = h - Math.floor(h);
+      const life = (time * (0.6 + r * 0.5) + r * 5) % 1.6;
+      if (life > 0.9) continue;
+      const y = H.waterY + 3 + Math.floor(r * 70);
+      const left = poolLeftAt(y) + 10;
+      const x = left + ((i * 53 + Math.floor(r * 400)) % (GAME_WIDTH - left - 6));
+      const k = life / 0.9;
+      g.lineStyle(1, 0xeaf8ff, 0.55 * (1 - k));
+      g.strokeEllipse(Math.round(x), y, 3 + k * 8, 1 + k * 2);
+    }
+    // Glanz an der Wasserlinie
+    g.fillStyle(0xbfeaff, 0.5);
+    for (let x = Math.round(poolLeftAt(H.waterY)); x < GAME_WIDTH; x += 6) {
+      if (Math.sin(x * 0.7 + time * 3) > 0.2) g.fillRect(x, H.waterY, 3, 1);
     }
   }
 }

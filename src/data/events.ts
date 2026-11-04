@@ -1,6 +1,6 @@
 // Alle Disziplinen an einem Ort – das Menü und die Ergebnisse lesen hier.
 
-export type EventKey = '110h' | 'pole' | 'long' | 'bmx' | 'swim';
+export type EventKey = '110h' | 'pole' | 'long' | 'bmx' | 'swim' | 'dive';
 
 export interface EventInfo {
   key: EventKey;
@@ -83,6 +83,21 @@ export const EVENTS: readonly EventInfo[] = [
     bestLabel: 'BESTZEIT',
     lowerIsBetter: true,
     format: (v) => v.toFixed(2),
+  },
+  {
+    key: 'dive',
+    name: 'TURMSPRINGEN',
+    scene: 'dive',
+    venue: 'hall',
+    controls: [
+      ['PFEIL LINKS/RECHTS', 'ABWECHSELND = SCHWUNG HOLEN'],
+      ['LEERTASTE', 'ARME OBEN: ABSPRINGEN'],
+      ['LEERTASTE HALTEN', 'SALTO DREHEN, LOS = ÖFFNEN'],
+      ['PFEIL HOCH', 'SCHRAUBE (WENN ANGESAGT)'],
+    ],
+    bestLabel: 'BESTLEISTUNG',
+    lowerIsBetter: false,
+    format: (v) => `${v.toFixed(2)} P`,
   },
 ];
 

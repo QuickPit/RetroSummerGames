@@ -73,6 +73,8 @@ export interface DrawOptions {
   helmet?: number;
   /** Farbe einer Badekappe: Schwimmbrille, barfuß, ohne Startnummer */
   cap?: number;
+  /** Barfuß im Badeanzug, aber ohne Kappe (Turmspringer) */
+  barefoot?: boolean;
   /** Wasseroberfläche (Bildschirm-Y, nur ohne Drehung): Teile darunter liegen im Wasser */
   waterY?: number;
 }
@@ -803,7 +805,7 @@ export function rotatePoint(x: number, y: number, angle: number): { x: number; y
 function drawFigure(g: Gfx, hx: number, hy: number, pose: Pose, look: RunnerLook, opts: DrawOptions): void {
   const { mood = 'neutral', time = 0, speed = 0, medal = null } = opts;
   // Schwimmer: barfuß, ohne Schweißbänder und Startnummer
-  const swim = opts.cap !== undefined;
+  const swim = opts.cap !== undefined || opts.barefoot === true;
   const water: WaterTint | undefined =
     opts.waterY !== undefined && !opts.rotation ? { y: opts.waterY, color: WATER_TINT, amount: 0.3, squash: 0.5 } : undefined;
   const pieces = (list: Piece[]) => drawPieces(g, list, water);

@@ -456,6 +456,68 @@ class Sfx {
     this.tone(1568, 0.12, 'square', 0.1);
   }
 
+  // ---- Turmspringen
+
+  /** Leiser Holzklick am Hochpunkt des Armschwungs – das Metronom für den Absprung */
+  swingTick(): void {
+    this.tone(1900, 0.025, 'square', 0.05);
+    this.burst(0.03, 0.12, 2600, 'bandpass');
+  }
+
+  /** Rauschen des Armschwungs je Tipp, lauter mit dem Schwung (0..1) */
+  swingWhoosh(level: number): void {
+    this.burst(0.09, 0.02 + 0.07 * level, 900 + 700 * level, 'bandpass');
+  }
+
+  /** Dumpfer Abdruck von der Plattform */
+  diveTakeoff(): void {
+    this.tone(120, 0.16, 'triangle', 0.4, 55);
+    this.burst(0.1, 0.25, 500);
+  }
+
+  /** Luftzug je halbem Salto; `k` 0..1 = Anteil am Ziel, die Tonhöhe steigt */
+  spinWhoosh(k: number): void {
+    const f = 700 + 1500 * Math.max(0, Math.min(1.2, k));
+    this.burst(0.11, 0.14, f, 'bandpass');
+    this.tone(f / 4, 0.08, 'triangle', 0.04, f / 3);
+  }
+
+  /** Schnapp-Ton beim Öffnen */
+  open(): void {
+    this.tone(1500, 0.04, 'square', 0.07, 900);
+  }
+
+  /** Sirren der Schraube */
+  twist(): void {
+    this.tone(500, 0.4, 'sawtooth', 0.03, 1900);
+    this.burst(0.3, 0.06, 3000, 'highpass');
+  }
+
+  /** Fast spritzerloses Eintauchen: kurzes „Plopp“ */
+  rip(): void {
+    this.tone(320, 0.09, 'triangle', 0.3, 110);
+    this.burst(0.08, 0.12, 1200, 'bandpass');
+  }
+
+  /** Klatscher auf das Wasser – laut und flach */
+  slap(): void {
+    this.burst(0.3, 0.9, 2600, 'bandpass');
+    this.burst(0.5, 0.4, 700);
+    this.tone(95, 0.2, 'triangle', 0.4, 50);
+  }
+
+  /** Kampfrichter klappt seine Tafel hoch */
+  cardFlip(): void {
+    this.burst(0.035, 0.25, 3200, 'highpass');
+    this.tone(1250, 0.03, 'square', 0.05);
+  }
+
+  /** Hochzählen der Punkte auf der Anzeigetafel */
+  scoreCount(seconds: number): void {
+    const n = Math.max(1, Math.round(seconds / 0.05));
+    for (let i = 0; i < n; i++) this.tone(1400 + i * 30, 0.02, 'square', 0.04, undefined, i * 0.05);
+  }
+
   /** Publikumsrauschen; `level` 0..1 */
   crowd(level: number): void {
     if (!this.ctx || !this.master || !this.noise) return;
