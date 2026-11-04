@@ -128,7 +128,7 @@ export class TitleScene extends Phaser.Scene {
     this.bestText = text(GAME_WIDTH / 2, 300, '', 8, '#4cd964').setOrigin(0.5, 0);
     const prompt = text(GAME_WIDTH / 2, 318, 'ENTER = START', 16).setOrigin(0.5, 0).setStroke('#10101c', 4);
     this.tweens.add({ targets: prompt, alpha: 0.25, duration: 550, yoyo: true, repeat: -1 });
-    text(GAME_WIDTH - 6, 350, 'v0.9 SOLO', 8, '#5d6278').setOrigin(1, 0);
+    text(GAME_WIDTH - 6, 350, 'v0.10 SOLO', 8, '#5d6278').setOrigin(1, 0);
 
     // Der eigene Athlet wippt neben der Steuerungshilfe
     this.previewGfx = this.add.graphics();

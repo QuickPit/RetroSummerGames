@@ -3,6 +3,34 @@
 Was sich für Spieler ändert – neueste Version oben. Hier lässt sich auch ohne Rückfragen nachlesen,
 was das Agenten-Team umgesetzt und welche Entscheidungen es getroffen hat.
 
+## 0.10.0 – Schwierigkeitsgrad
+
+- Neue Menüzeile **GEGNER: LEICHT / NORMAL / SCHWER**, gilt für alle sechs Disziplinen und wird gemerkt.
+  Ergebnis, Medaillenspiegel und Endstand zeigen die gewählte Stufe.
+- Die Gegner waren für die meisten Spieler zu schnell (Owner-Feedback). Gemessen: Das Spiel war auf
+  11–12 Tipps/s ausgelegt. Jetzt gilt:
+  - LEICHT: ab etwa 6 Tipps/s Medaillen,
+  - NORMAL: etwa 8 Tipps/s reichen für das Podest,
+  - SCHWER: verlangt Weltklasse.
+  Belegt per Simulation (Balance-Tests je Stufe) und im Browser.
+- Tempo beim Tippen: Bis etwa 9 Tipps/s bringt jeder Tipp spürbar mehr, darüber flacht es ab. Hämmern
+  über 11 Tipps/s lohnt sich kaum noch.
+  Folge: Ältere Bestleistungen bei Hürden, Weit- und Stabhochsprung, die durch sehr schnelles Hämmern
+  entstanden sind, sind womöglich nicht mehr zu schlagen.
+- Stabhochsprung: Für den Einstich zählt jetzt das geglättete Anlauftempo, wie beim Weitsprung. Ein
+  einzelner schneller Tipp kurz vor dem Einstich entscheidet nicht mehr.
+- Schwimmen: Wer nach Luft schnappt, verliert jetzt etwas länger an Tempo (0,9 s). Atmen mit ↑ bringt
+  bei 10 Tipps/s wieder etwa 4 s Vorteil.
+- Entscheidungen des Teams:
+  - Auf SCHWER unterbieten die Gegner gelegentlich den Weltrekord. Das ist so gewollt. Die Meldung
+    WELTREKORD! gibt es weiterhin nur für dich.
+  - Der schwächste Gegner auf LEICHT bleibt im Stabhochsprung manchmal ohne gültige Höhe (etwa jeder
+    siebte Wettbewerb).
+  - Die Sprunglisten der Turmspringer bleiben, wie sie sind, auch wenn zwei Listen um wenige Punkte
+    vom rechnerisch besten Sprung abweichen.
+- Technik: Der Spieltest-Bot im Weitsprung tritt nicht mehr über. Ohne gültigen Versuch schlägt der
+  Spieltest jetzt fehl.
+
 ## 0.9.1 – Ruhe auf dem Startblock
 
 - Fix: Die Schwimmer kreisten vor dem Start ununterbrochen mit den Armen – das sah aus wie Kraulen im Stehen.
