@@ -638,3 +638,94 @@ describe('Balancing', () => {
     expect(total).toBeLessThan(90);
   });
 });
+
+// QA-Regressionstests (RSG-09): Fairness unabhängig von der Bildrate und Tippen in der Luft
+describe('Fairness (QA)', () => {
+  type Input = { t: number; run: (s: DiveState, t: number) => void };
+
+  /** Spielt Eingaben mit festen Zeitstempeln ab wie die Szene: Eingaben vor dem Bild, dann feste Schritte bis zur Bildzeit. */
+  function playFrames(def: DiveDef, inputs: Input[], frameDt: () => number): DiveState {
+    const s = createDive(def);
+    const queue = [...inputs].sort((a, b) => a.t - b.t);
+    let now = 0;
+    while (s.phase !== 'done' && now < 30) {
+      now += frameDt();
+      while (queue.length && queue[0].t <= now) {
+        const i = queue.shift()!;
+        i.run(s, Math.max(s.time, i.t));
+      }
+      while (s.time + DT <= now) stepDive(s, DT);
+    }
+    return s;
+  }
+
+  function plan(release: number, extra: Input[] = []): Input[] {
+    const rng = createRng(99);
+    const inputs: Input[] = [];
+    let side: 'L' | 'R' = 'L';
+    for (let t = 1.0; t < 4.3; t += (1 + 0.15 * (2 * rng() - 1)) / 10.5) {
+      const sd = side;
+      inputs.push({ t, run: (s, at) => void swingTap(s, sd, at) });
+      side = side === 'L' ? 'R' : 'L';
+    }
+    const press = 1.0 + 0.25 + 3 + 0.013;
+    inputs.push({ t: press, run: (s, at) => void takeoff(s, at) });
+    inputs.push({ t: press + release, run: (s, at) => setHold(s, false, at) });
+    return [...inputs, ...extra.map((e) => ({ ...e, t: press + e.t }))];
+  }
+
+  const frameRates: [string, () => number][] = [
+    ['60 Hz', () => 1 / 60],
+    ['144 Hz', () => 1 / 144],
+    ['30 Hz', () => 1 / 30],
+    [
+      'ruckelnd',
+      (() => {
+        const r = createRng(5);
+        return () => 0.005 + 0.04 * r();
+      })(),
+    ],
+  ];
+
+  it('gleiche Eingaben ergeben bei jeder Bildrate dieselben Noten', () => {
+    const cases: [DiveId, number, Input[]][] = [
+      ['25h', 0.93, []],
+      ['35h', 1.3, []],
+      [
+        '15s2',
+        1.06,
+        [
+          { t: 0.15, run: (s, at) => void twist(s, at) },
+          { t: 0.65, run: (s, at) => void twist(s, at) },
+        ],
+      ],
+    ];
+    for (const [id, release, extra] of cases) {
+      const def = diveById(id);
+      const results = frameRates.map(([, f]) => judge(playFrames(def, plan(release, extra), f)));
+      // Gültige, gute Sprünge – sonst prüft der Vergleich nur Deckelungen
+      expect(results[0].fail).toBe(false);
+      expect(results[0].base).toBeGreaterThan(7);
+      for (const j of results.slice(1)) {
+        expect(j.notes).toEqual(results[0].notes);
+        expect(j.points).toBe(results[0].points);
+        expect(j.rating).toBe(results[0].rating);
+        expect(j.tip).toBe(results[0].tip);
+      }
+    }
+  });
+
+  it('Tippen in der Luft ändert weder Kraft noch Wertung', () => {
+    const def = diveById('25h');
+    const airTaps: Input[] = Array.from({ length: 14 }, (_, i) => ({
+      t: 0.05 + i * 0.09,
+      run: (s, at) => {
+        expect(swingTap(s, i % 2 ? 'R' : 'L', at)).toBe(false);
+      },
+    }));
+    const a = playFrames(def, plan(0.93), () => 1 / 60);
+    const b = playFrames(def, plan(0.93, airTaps), () => 1 / 60);
+    expect(b.power).toBe(a.power);
+    expect(judge(b)).toEqual(judge(a));
+  });
+});
