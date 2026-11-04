@@ -84,6 +84,11 @@ Der `/sprint`-Ablauf nimmt immer den **obersten offenen** Punkt (`[ ]`), setzt i
   Doppelte Logik (Tastatur-Verwaltung, Fade, Ergebnis-Übergabe, Kamera, Board-Ablauf) in gemeinsame
   Helfer überführen – ohne Verhaltensänderung, Spieltest bleibt grün.
 
+- [ ] **RSG-15 Hilfekasten im Titel**
+  Tasten- und Textspalte stehen fest (x126/x276): „LEERTASTE AM BRETT“ hat nur 6 px Luft, der
+  längste Steuerungstext (33 Zeichen) ragt über den Kasten. Spaltenberechnung wie im NÄCHSTE-Kasten
+  des Medaillenspiegels (`MedalsScene`) übernehmen.
+
 - [ ] **RSG-12 Lesbare Umlaute**
   In „Press Start 2P“ wirken Ä/Ö/Ü wie Kleinbuchstaben. Eigene Großbuchstaben-Umlaute zeichnen
   (z. B. Bitmap-Schrift aus der vorhandenen erzeugen) oder gleichwertige Lösung.
