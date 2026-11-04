@@ -91,6 +91,29 @@ npm run build     # Produktions-Build nach dist/
 Jeder Push auf `main` wird per GitHub Actions getestet, gebaut und auf GitHub Pages veröffentlicht
 (`.github/workflows/deploy.yml`).
 
+Automatischer Spieltest – ein Bot spielt alle Disziplinen im Headless-Browser durch
+(nutzt das global installierte Playwright, Screenshots landen in `e2e-output/`):
+
+```bash
+NODE_PATH=$(npm root -g) npm run e2e
+```
+
+### Entwicklung mit dem Agenten-Team
+
+Das Spiel wird mit einem Claude-Code-Agenten-Team weiterentwickelt:
+
+| Agent | Aufgabe |
+| --- | --- |
+| `game-designer` | Spezifikationen, Balancing, Regeln, Texte (`docs/design/`) |
+| `game-engineer` | Umsetzung von Disziplinen, Modi und Fehlerbehebungen inkl. Tests |
+| `pixel-artist` | Prozedurale Pixelgrafik, Animationen, Sounds |
+| `qa-tester` | Tests, Spieltest, Screenshot-Prüfung, Fehlerberichte |
+| `code-reviewer` | Unabhängiges Review jedes Diffs |
+
+`/sprint` arbeitet den nächsten Punkt aus [`docs/ROADMAP.md`](docs/ROADMAP.md) ab – Design, Umsetzung,
+Test, Review und Veröffentlichung. Was sich geändert hat, steht im [`CHANGELOG.md`](CHANGELOG.md);
+Projektwissen und Regeln für alle Agenten in [`CLAUDE.md`](CLAUDE.md).
+
 ## Aufbau
 
 ```
@@ -100,6 +123,9 @@ src/
   audio/      Per Web Audio synthetisierte Soundeffekte
   scenes/     Phaser-Szenen: Titel, Hürdenlauf, Stabhochsprung, Weitsprung, BMX, Ergebnis
   data/       Disziplinen, Nationen und lokale Speicherung (Bestleistungen, Auswahl)
+scripts/e2e/  Automatischer Spieltest (Bot je Disziplin)
+docs/         Roadmap und Design-Spezifikationen
+.claude/      Agenten-Team und /sprint-Ablauf
 ```
 
 Alle Grafiken und Sounds werden zur Laufzeit erzeugt – es gibt keine fremden Assets.
