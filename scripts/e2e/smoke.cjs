@@ -24,9 +24,10 @@ const DISCIPLINES = {
   pole: { scene: 'polevault' },
   long: { scene: 'longjump' },
   bmx: { scene: 'bmx' },
+  swim: { scene: 'swim' },
   wettkampf: { competition: true },
 };
-const BOT_OF_SCENE = { race: 'hurdles', polevault: 'pole', longjump: 'long', bmx: 'bmx' };
+const BOT_OF_SCENE = { race: 'hurdles', polevault: 'pole', longjump: 'long', bmx: 'bmx', swim: 'swim' };
 
 // ---------------------------------------------------------------- Bot im Browser
 // Läuft per page.evaluate im Spiel. Liest den Zustand der Szene in jedem Takt
@@ -53,7 +54,29 @@ function botInPage(kind) {
   };
   const HURDLES = Array.from({ length: 10 }, (_, i) => 13.72 + i * 9.14);
   const LOGS = [38, 110, 176];
-  const mem = { done: false, attempts: 0, holding: false, extended: false, planted: false, released: false, jumpCount: 0, inAir: false };
+  const mem = {
+    done: false,
+    attempts: 0,
+    holding: false,
+    extended: false,
+    planted: false,
+    released: false,
+    jumpCount: 0,
+    inAir: false,
+    turned: false,
+    failed: null,
+    nextTap: 0,
+  };
+  // Gleichmäßiger Takt nach Fahrplan – der Intervall-Timer allein würde die Rate drücken
+  const steadyTap = (rate) => {
+    const now = performance.now();
+    if (now < mem.nextTap) return;
+    const gap = 1000 / rate;
+    // Nach einem Ruckler nicht aufholen – zwei Tipps kurz hintereinander wären Hämmern
+    mem.nextTap = Math.max(mem.nextTap + gap, now + gap * 0.85);
+    press(side ? 'ArrowRight' : 'ArrowLeft');
+    side ^= 1;
+  };
 
   // Node setzt das Flag, wenn sein Zeitlimit greift – dann keine Tasten mehr schicken
   window.__botStop = false;
@@ -68,7 +91,7 @@ function botInPage(kind) {
       if (active('confirm')) return;
       if (active('result')) {
         clearInterval(timer);
-        resolve({ ok: true, log });
+        resolve(mem.failed ? { ok: false, log: [...log, `✗ ${mem.failed}`] } : { ok: true, log });
         return;
       }
       if (performance.now() - started > 140_000) {
@@ -165,6 +188,37 @@ function botInPage(kind) {
             mem.extended = true;
             press('Space');
           }
+        }
+      } else if (kind === 'swim') {
+        const sc = game.scene.getScene('swim');
+        if (sc.phase === 'ready') press('Enter');
+        if (sc.phase !== 'race') return;
+        const s = sc.player.state;
+        if (s.finishTime !== null) {
+          if (!mem.done) {
+            log.push(
+              `Zeit: ${s.finishTime.toFixed(2)} s, Wende: ${s.turnRating}, verschluckt: ${s.chokes}, ` +
+                `Luft geschnappt: ${s.gasps}, Atemzüge: ${s.breaths}, Takt: ${Math.round((s.inTakt / Math.max(1, s.strokes)) * 100)}%`,
+            );
+            if (s.finishTime >= 60) mem.failed = `Zeit ${s.finishTime.toFixed(2)} s nicht unter 60 s`;
+            else if (s.turnRating === 'open') mem.failed = 'Wende verpasst (angeschlagen)';
+            else if (s.gasps > 0) mem.failed = `${s.gasps}x nach Luft geschnappt`;
+          }
+          mem.done = true;
+          if (!sc.resultsShown) press('Enter');
+          return;
+        }
+        if (s.phase === 'block') {
+          press('Space');
+          return;
+        }
+        if (s.phase !== 'swim') return;
+        steadyTap(9.5);
+        if (s.air < 0.3 && s.breathing <= 0) press('ArrowUp');
+        // Rollwende am Idealabstand
+        if (!s.turned && !mem.turned && 50 - s.d <= s.v * 0.45) {
+          mem.turned = true;
+          press('Space');
         }
       } else if (kind === 'bmx') {
         const sc = game.scene.getScene('bmx');
@@ -335,7 +389,15 @@ async function runCompetition(browser) {
     await shot('1-intro');
 
     const order = [];
-    for (let i = 0; i < 4; i++) {
+    const room = () => page.evaluate(async () => (await import('/src/audio/sfx.ts')).sfx.currentRoom);
+    // Reihenfolge zur Laufzeit aus COMPETITION_ORDER (Szenennamen über das Register der Disziplinen)
+    const expectedOrder = await page.evaluate(async () => {
+      const { COMPETITION_ORDER } = await import('/src/sim/competition.ts');
+      const { eventByKey } = await import('/src/data/events.ts');
+      return COMPETITION_ORDER.map((key) => eventByKey(key).scene);
+    });
+    const EVENT_COUNT = expectedOrder.length;
+    for (let i = 0; i < EVENT_COUNT; i++) {
       if (i === 1) {
         // Fall A: ENTER und ESC im selben Bild – es geht weiter, ohne Rückfrage und ohne Restszene
         await pressTogether('Enter', 'Escape');
@@ -348,7 +410,7 @@ async function runCompetition(browser) {
         await page.keyboard.press('Enter');
       }
       await page.waitForFunction(
-        () => ['race', 'polevault', 'longjump', 'bmx'].some((k) => window.__game.scene.isActive(k)),
+        () => ['race', 'polevault', 'longjump', 'swim', 'bmx'].some((k) => window.__game.scene.isActive(k)),
         null,
         { timeout: 15_000 },
       );
@@ -403,6 +465,42 @@ async function runCompetition(browser) {
         check(t1 - t0 < 0.25, `Zeitsprung nach NEIN: ${t0.toFixed(3)} → ${t1.toFixed(3)} s`);
         log.push(`Rückfrage im Rennen: Zeit stand bei ${t0.toFixed(2)} s, danach ${t1.toFixed(2)} s`);
       }
+      if (scene === 'swim') {
+        // Rückfrage mitten im Schwimmrennen: Zeit steht, kein Zeitsprung nach NEIN, kein Fehlstart
+        await page.waitForFunction(() => {
+          const sc = window.__game.scene.getScene('swim');
+          return sc.phase === 'race' && sc.simTime > 6;
+        }, null, { timeout: 20_000 });
+        check((await room()) === 'hall', `Kein Hallenklang beim Schwimmen: ${await room()}`);
+        await page.keyboard.press('Escape');
+        await waitActive('confirm');
+        const t0 = await page.evaluate(() => window.__game.scene.getScene('swim').simTime);
+        await page.waitForTimeout(1000);
+        const mid = await page.evaluate(() => {
+          const sc = window.__game.scene.getScene('swim');
+          return { t: sc.simTime, paused: window.__game.scene.isPaused('swim'), falseStarts: sc.falseStarts };
+        });
+        await page.keyboard.press('KeyN');
+        await page.waitForFunction(() => !window.__game.scene.isPaused('swim') && !window.__game.scene.isActive('confirm'), null, {
+          timeout: 5_000,
+        });
+        const t1 = await page.evaluate(() => window.__game.scene.getScene('swim').simTime);
+        check(mid.paused && mid.t === t0 && mid.falseStarts === 0, `Schwimmen läuft während der Rückfrage weiter: ${JSON.stringify(mid)}`);
+        check(t1 - t0 < 0.25, `Zeitsprung nach NEIN (Schwimmen): ${t0.toFixed(3)} → ${t1.toFixed(3)} s`);
+        log.push(`Rückfrage beim Schwimmen: Zeit stand bei ${t0.toFixed(2)} s, danach ${t1.toFixed(2)} s`);
+        // Screenshots im Rennen und an der Wende
+        await page.waitForFunction(() => window.__game.scene.getScene('swim').simTime > 14, null, { timeout: 30_000 });
+        await shot(`${2 + i}-swim-race`);
+        await page.waitForFunction(
+          () => {
+            const p = window.__game.scene.getScene('swim').player.state;
+            return p.phase === 'flip' || p.phase === 'wall' || p.phase === 'open' || p.turned;
+          },
+          null,
+          { timeout: 60_000, polling: 16 },
+        );
+        await shot(`${2 + i}-swim-turn`);
+      }
       const r = await botRun;
       for (const line of r.log) log.push(`${bot}: ${line}`);
       check(r.ok, `Bot ${bot} hat die Siegerehrung nicht erreicht`);
@@ -419,7 +517,8 @@ async function runCompetition(browser) {
         const champ = pv.rows.find((row) => row.code === pv.champ);
         check(champ && champ.valid, `Champion ${pv.champ} ohne gültige Höhe`);
       }
-      const mode = i < 3 ? 'between' : 'final';
+      if (scene === 'swim') check((await room()) === 'hall', 'Siegerehrung Schwimmen ohne Hallenklang');
+      const mode = i < EVENT_COUNT - 1 ? 'between' : 'final';
       if (i === 0) {
         // Fall B: ENTER und ESC im selben Bild in der Siegerehrung
         await pressTogether('Enter', 'Escape');
@@ -434,6 +533,7 @@ async function runCompetition(browser) {
       }
       await page.waitForTimeout(600);
       await shot(`${2 + i}-${bot}-${mode}`);
+      check((await room()) === 'open', `Hallenklang im Medaillenspiegel nach ${scene}: ${await room()}`);
 
       if (i === 0) {
         // Einmal abbrechen wollen und mit N weitermachen
@@ -463,7 +563,8 @@ async function runCompetition(browser) {
         log.push('Rückfrage: ESC öffnet sie, N setzt fort (auch bei ESC+ENTER im selben Bild)');
       }
     }
-    check(order.join(',') === 'race,longjump,polevault,bmx', `Falsche Reihenfolge: ${order.join(',')}`);
+    check(order.join(',') === expectedOrder.join(','), `Falsche Reihenfolge: ${order.join(',')} statt ${expectedOrder.join(',')}`);
+    check(order.join(',') === 'race,longjump,polevault,swim,bmx', `Reihenfolge weicht von der Spec ab: ${order.join(',')}`);
     log.push(`Reihenfolge: ${order.join(' → ')}`);
 
     const final = await page.evaluate(() => {
@@ -473,7 +574,7 @@ async function runCompetition(browser) {
     for (const r of final.table) log.push(`${r.rank}. ${r.code}  G${r.gold} S${r.silver} B${r.bronze}`);
     log.push(`Gesamtsieger: ${final.winners.length ? final.winners.join(', ') : 'keiner'}`);
     const medals = final.table.reduce((n, r) => n + r.total, 0);
-    check(medals > 0 && medals <= 12, `Unplausible Medaillenzahl ${medals}`);
+    check(medals > 0 && medals <= 3 * EVENT_COUNT, `Unplausible Medaillenzahl ${medals}`);
 
     // Endstand → Abschlussfeier: Podest wie im Spiegel, keine wachsende Objektzahl, ENTER führt ins Menü.
     // Doppeltes ENTER (20 ms Abstand) darf die Feier nicht überspringen (Eingabesperre zu Beginn).
@@ -513,7 +614,7 @@ async function runCompetition(browser) {
     check(JSON.stringify(c1.podium) === JSON.stringify(expected), `Podest ${JSON.stringify(c1.podium)} ≠ Spiegel ${JSON.stringify(expected)}`);
     log.push(`Abschlussfeier: Podest ${c1.podium.map((p) => `${p.rank}. ${p.codes.join('/')}`).join(', ') || 'leer'}`);
     await page.waitForTimeout(2000);
-    await shot('6-ceremony');
+    await shot(`${2 + EVENT_COUNT}-ceremony`);
     const c2 = await ceremony();
     check(c2.children === c1.children, `Objektzahl wächst in der Feier: ${c1.children} → ${c2.children}`);
     check(c2.elapsed > c1.elapsed, 'Abschlussfeier läuft nicht');

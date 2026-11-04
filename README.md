@@ -6,15 +6,15 @@ diesmal per Tastatur.
 
 **Spielen:** https://quickpit.github.io/RetroSummerGames/
 
-## Aktueller Stand (v0.7 – Einzelspieler)
+## Aktueller Stand (v0.8 – Einzelspieler)
 
-Vier Disziplinen gegen drei Computer-Gegner (Rookie, Profi, Champion). Im Startbildschirm wählst du
+Fünf Disziplinen gegen drei Computer-Gegner (Rookie, Profi, Champion). Im Startbildschirm wählst du
 mit **↑ / ↓** die Zeile (Modus, Disziplin, Nation, Athlet) und änderst sie mit **← / →**.
 
 ### Wettkampf „Die Spiele“
 
-Menüzeile **MODUS: WETTKAMPF** – alle vier Disziplinen nacheinander in fester Reihenfolge
-(110 m Hürden, Weitsprung, Stabhochsprung, BMX) gegen dieselben drei Nationen.
+Menüzeile **MODUS: WETTKAMPF** – alle fünf Disziplinen nacheinander in fester Reihenfolge
+(110 m Hürden, Weitsprung, Stabhochsprung, 100 m Freistil, BMX) gegen dieselben drei Nationen.
 
 - Jede Disziplin gibt es nur **einmal** – „Nochmal“ und R sind im Wettkampf aus (dafür gibt es den Einzelmodus).
 - Nach jeder Siegerehrung zeigt **Enter** den Medaillenspiegel der Nationen (Gold vor Silber vor Bronze;
@@ -64,6 +64,21 @@ Menüzeile **MODUS: WETTKAMPF** – alle vier Disziplinen nacheinander in fester
 - Der beste Absprungwinkel liegt um 30°. Ohne Beinestrecken fällt man nach hinten in den Sand und verliert fast einen Meter.
 - Drei Durchgänge gegen drei Computer-Gegner, der beste Versuch zählt; bei Gleichstand entscheidet der zweitbeste.
 - Anzeigetafel nach jedem Versuch, Führungs- und Weltrekordlinie (8,95 m) in der Grube, Maßband nach der Landung.
+
+### 100 m Freistil (Schwimmhalle)
+
+| Taste | Aktion |
+| --- | --- |
+| Leertaste (Start) | Startsprung nach dem Signal – zu früh = Fehlstart |
+| ← / → (oder A / D) | **im Takt** abwechselnd tippen = Armzüge |
+| ↑ (oder W) | Luft holen |
+| Leertaste (an der Wand) | Rollwende kurz vor der Wand (bei 50 m) |
+
+- Rhythmus statt Hämmern: Am schnellsten ist man mit gleichmäßigen ~10 Tipps pro Sekunde. Wer zu hektisch tippt,
+  verschluckt sich und verliert Tempo (Anzeige TAKT).
+- Jeder Zug kostet Luft (Anzeige LUFT). Atmen kostet kurz Tempo – wer gar nicht atmet, schnappt irgendwann nach Luft.
+- Wende: Leertaste im richtigen Abstand zur Wand = PERFEKT; ohne Wende schlägt man an und verliert gut eine Sekunde.
+- Gelbe Weltrekord-Linie (46,50 s) im Becken, Siegerehrung in der Halle.
 
 ### BMX (Strandkurs)
 
@@ -133,10 +148,10 @@ Projektwissen und Regeln für alle Agenten in [`CLAUDE.md`](CLAUDE.md).
 
 ```
 src/
-  sim/        Reine Spiellogik ohne Grafik (Hürden, Stabhochsprung, Weitsprung, BMX, Wettkampf, Gegner) – getestet
-  gfx/        Prozedurale Grafik: Athleten, BMX-Rad, Stadion, Strand, Flaggen, HUD
+  sim/        Reine Spiellogik ohne Grafik (Hürden, Stabhochsprung, Weitsprung, BMX, Schwimmen, Wettkampf, Gegner) – getestet
+  gfx/        Prozedurale Grafik: Athleten, Schwimmer, BMX-Rad, Stadion, Strand, Schwimmhalle, Flaggen, HUD
   audio/      Per Web Audio synthetisierte Soundeffekte
-  scenes/     Phaser-Szenen: Titel, Hürdenlauf, Stabhochsprung, Weitsprung, BMX, Ergebnis, Medaillenspiegel, Abschlussfeier, Rückfrage
+  scenes/     Phaser-Szenen: Titel, Hürdenlauf, Stabhochsprung, Weitsprung, BMX, Schwimmen, Ergebnis, Medaillenspiegel, Abschlussfeier, Rückfrage
   data/       Disziplinen, Nationen, lokale Speicherung (Bestleistungen, Auswahl) und Wettkampf-Spielstand (nur im Speicher)
 scripts/e2e/  Automatischer Spieltest (Bot je Disziplin)
 docs/         Roadmap und Design-Spezifikationen
@@ -145,7 +160,7 @@ docs/         Roadmap und Design-Spezifikationen
 
 Alle Grafiken und Sounds werden zur Laufzeit erzeugt – es gibt keine fremden Assets.
 Die Spielgefühl-Parameter (Beschleunigung pro Tipp, Sprungdauer, Strafe beim Reißen …)
-stehen gesammelt in `PHYSICS` (`src/sim/hurdles.ts`), `VAULT` (`src/sim/polevault.ts`), `LJ` (`src/sim/longjump.ts`) und `BMX` (`src/sim/bmx.ts`).
+stehen gesammelt in `PHYSICS` (`src/sim/hurdles.ts`), `VAULT` (`src/sim/polevault.ts`), `LJ` (`src/sim/longjump.ts`), `BMX` (`src/sim/bmx.ts`) und `SWIM` (`src/sim/swim.ts`).
 
 ## Ausblick
 

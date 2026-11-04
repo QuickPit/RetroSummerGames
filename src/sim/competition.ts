@@ -9,7 +9,7 @@ export const COMPETITION = {
   confirmDefault: 'no',
 } as const;
 
-export const COMPETITION_ORDER = ['110h', 'long', 'pole', 'bmx'] as const satisfies readonly EventKey[];
+export const COMPETITION_ORDER = ['110h', 'long', 'pole', 'swim', 'bmx'] as const satisfies readonly EventKey[];
 
 export type Medal = 'gold' | 'silver' | 'bronze';
 const MEDALS: readonly Medal[] = ['gold', 'silver', 'bronze'];

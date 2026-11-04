@@ -20,7 +20,8 @@ import { drawFlag } from '../gfx/flags';
 import { drawBmx } from '../gfx/bike';
 import { carryPole, createLook, drawRunner, drawShadow, handOffset, idlePose, type RunnerLook } from '../gfx/runner';
 import { Stadium } from '../gfx/stadium';
-import { createCompetition } from '../sim/competition';
+import { armCirclePose, drawSwimmerUpright } from '../gfx/swimmer';
+import { COMPETITION_ORDER, createCompetition } from '../sim/competition';
 
 const STRIPES = [0xf7d038, 0xf08a24, 0xe8442e, 0xc42f6e, 0x7a3fc4];
 const ROWS = ['MODUS', 'DISZIPLIN', 'NATION', 'ATHLET'] as const;
@@ -30,7 +31,7 @@ const VALUE_X = 370;
 const HELP_Y = 232;
 const ROW = { mode: 0, event: 1, nation: 2, look: 3 };
 const COMPETITION_HELP: [string, string][] = [
-  ['REIHENFOLGE', 'HÜRDEN - WEIT - STAB - BMX'],
+  ['REIHENFOLGE', 'HÜR - WEIT - STAB - SCHW - BMX'],
   ['WERTUNG', 'MEDAILLENSPIEGEL DER NATIONEN'],
   ['STEUERUNG', 'VOR JEDER DISZIPLIN ERKLÄRT'],
   ['PFEIL HOCH/RUNTER', 'MENÜ: ZEILE WÄHLEN'],
@@ -114,7 +115,7 @@ export class TitleScene extends Phaser.Scene {
     this.bestText = text(GAME_WIDTH / 2, 298, '', 8, '#4cd964').setOrigin(0.5, 0);
     const prompt = text(GAME_WIDTH / 2, 318, 'ENTER = START', 16).setOrigin(0.5, 0).setStroke('#10101c', 4);
     this.tweens.add({ targets: prompt, alpha: 0.25, duration: 550, yoyo: true, repeat: -1 });
-    text(GAME_WIDTH - 6, 350, 'v0.7 SOLO', 8, '#5d6278').setOrigin(1, 0);
+    text(GAME_WIDTH - 6, 350, 'v0.8 SOLO', 8, '#5d6278').setOrigin(1, 0);
 
     // Der eigene Athlet wippt neben der Steuerungshilfe
     this.previewGfx = this.add.graphics();
@@ -180,7 +181,7 @@ export class TitleScene extends Phaser.Scene {
     this.look = createLook(country, this.lookSeed, 1);
 
     this.values[ROW.mode].setText(competition ? 'WETTKAMPF' : 'EINZELDISZIPLIN');
-    this.values[ROW.event].setText(competition ? 'ALLE 4' : event.name);
+    this.values[ROW.event].setText(competition ? `ALLE ${COMPETITION_ORDER.length}` : event.name);
     this.values[ROW.nation].setText(country.name);
     this.values[ROW.look].setText(`TYP ${this.lookSeed}`);
     // Bei der Nation sitzt die Flagge links neben dem Namen
@@ -230,8 +231,18 @@ export class TitleScene extends Phaser.Scene {
     g.clear();
     const x = 58;
     const y = 282;
-    drawShadow(g, x, y, 0);
     const key = this.mode === 'competition' ? '110h' : EVENTS[this.eventIndex].key;
+    if (key === 'swim') {
+      // Badekleidung auf dem Fliesenboden, die Arme kreisen
+      g.fillStyle(COLORS.tileGrout, 1);
+      g.fillRect(x - 25, y - 2, 52, 7);
+      g.fillStyle(COLORS.tile, 1);
+      for (let i = 0; i < 4; i++) g.fillRect(x - 24 + i * 13, y - 1, 12, 5);
+      drawShadow(g, x, y, 0);
+      drawSwimmerUpright(g, x, y, armCirclePose(this.elapsed, this.look.seed), this.look, { dir: 1, time: this.elapsed });
+      return;
+    }
+    drawShadow(g, x, y, 0);
     if (key === 'bmx') {
       // Im Stand pedalierend auf dem Rad
       drawBmx(g, x, y, 0, this.look, {

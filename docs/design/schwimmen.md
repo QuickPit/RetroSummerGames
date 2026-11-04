@@ -326,3 +326,12 @@ Zeile 2: `REAKTION 0.21 S   WENDE: PERFEKT   TAKT 96%`. Zeile 3 nur bei Fehlstar
   - Spritzer und Partikel.
   - `gfx/swimHud.ts` und `drawUpKey` in `hud.ts`.
   - Optional: eine gelbe Weltrekord-Linie `WR`, die im Tempo von 46.50 durchs Becken läuft.
+
+## Abweichungen in der Umsetzung (v0.8.0)
+
+- Verschlucken: Sperrzeit 2,5 s (statt 1,5 s), `chokeAir` 0,05, `chokeStun` 0,4, `chokeSpeedFactor` 0,9,
+  `gaspStun` 0,6. Hektische Züge kosten anteilig Luft und bringen in der Sperrzeit anteilig weniger Vortrieb –
+  so bleibt auch Hämmern ohne Atmen unter 90 s (gemessen 59–84 s) und bleibt klar langsamer als ruhige 10/s.
+- Während eines Atemzugs wird keine Luft verbraucht; Wende/Anschlag/Ziel vollenden einen laufenden Atemzug.
+- Wende wird nach dem Tastenzeitpunkt bewertet (Abstand auf `ev.timeStamp` hochgerechnet).
+- Siegerehrung in der Halle (`venue: 'hall'` in `events.ts`), Weltrekord-Linie im Becken umgesetzt.

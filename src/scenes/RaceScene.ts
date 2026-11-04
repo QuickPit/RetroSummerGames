@@ -235,6 +235,11 @@ export class RaceScene extends Phaser.Scene {
           if (!competition) this.scene.restart({ countryIndex: this.countryIndex });
           return;
         }
+        // Vor dem Schuss gedrückt, aber erst jetzt verarbeitet: Fehlstart statt Reaktion 0.000
+        if ((side || isJump) && ev.timeStamp > 0 && ev.timeStamp < this.gunAt) {
+          this.falseStart();
+          return;
+        }
         const t = this.raceTimeAt(ev.timeStamp);
         if (side) {
           const valid = tap(this.player.state, side, t);
@@ -274,11 +279,26 @@ export class RaceScene extends Phaser.Scene {
   }
 
   private falseStart(): void {
+    // Kam der Fehlstart erst nach dem Schuss an, sind die Gegner womöglich schon losgelaufen
+    if (this.phase === 'race') this.resetField();
     this.phase = 'falseStart';
     this.phaseTimer = 0;
     this.falseStarts++;
     this.hud.setMessage('FEHLSTART!', 'NICHT VOR DEM SCHUSS LOSLAUFEN', '#e8442e');
     sfx.falseStart();
+  }
+
+  /** Alle zurück in den Startblock (gleiches Feld, gleiche Profile) */
+  private resetField(): void {
+    this.simTime = 0;
+    this.finishOrder = 0;
+    for (const c of this.competitors) {
+      Object.assign(c.state, createRunner());
+      if (c.cpu) c.cpu = new CpuController(c.state, c.cpu.profile, Math.random);
+      c.place = null;
+      c.fallenAt.fill(null);
+      c.dust.length = 0;
+    }
   }
 
   private updateStartPhases(dt: number): void {
@@ -316,7 +336,7 @@ export class RaceScene extends Phaser.Scene {
     this.simTime = 0;
     this.hud.setMessage('LOS!', '');
     this.time.delayedCall(700, () => {
-      if (this.playerFinishedAt === null) this.hud.setMessage('', '');
+      if (this.phase === 'race' && this.playerFinishedAt === null) this.hud.setMessage('', '');
     });
     sfx.gun();
     sfx.crowd(0.6);
