@@ -9,6 +9,7 @@ import { MedalsScene } from './scenes/MedalsScene';
 import { PoleVaultScene } from './scenes/PoleVaultScene';
 import { RaceScene } from './scenes/RaceScene';
 import { ResultScene } from './scenes/ResultScene';
+import { SwimScene } from './scenes/SwimScene';
 import { TitleScene } from './scenes/TitleScene';
 
 async function start(): Promise<void> {
@@ -33,7 +34,18 @@ async function start(): Promise<void> {
       autoCenter: Phaser.Scale.CENTER_BOTH,
     },
     // Die Rückfrage liegt als Overlay über allen anderen Szenen
-    scene: [BootScene, TitleScene, RaceScene, PoleVaultScene, LongJumpScene, BmxScene, ResultScene, MedalsScene, ConfirmScene],
+    scene: [
+      BootScene,
+      TitleScene,
+      RaceScene,
+      PoleVaultScene,
+      LongJumpScene,
+      BmxScene,
+      SwimScene,
+      ResultScene,
+      MedalsScene,
+      ConfirmScene,
+    ],
   });
 
   // Für automatisierte Tests im Entwicklungsmodus erreichbar machen.

@@ -234,6 +234,98 @@ class Sfx {
     }
   }
 
+  // ---- Schwimmen
+
+  /** Langer Pfiff des Kampfrichters mit Vibrato */
+  whistle(): void {
+    if (!this.ctx || !this.master) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const lfo = this.ctx.createOscillator();
+    const depth = this.ctx.createGain();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = 2800;
+    lfo.frequency.value = 28;
+    depth.gain.value = 90;
+    lfo.connect(depth).connect(osc.frequency);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.06, t + 0.04);
+    gain.gain.setValueAtTime(0.06, t + 0.7);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.85);
+    osc.connect(gain).connect(this.master);
+    osc.start(t);
+    lfo.start(t);
+    osc.stop(t + 0.9);
+    lfo.stop(t + 0.9);
+  }
+
+  /** Elektronisches Startsignal */
+  startBeep(): void {
+    this.tone(880, 0.25, 'square', 0.16);
+  }
+
+  /** Eintauchen nach dem Startsprung */
+  plunge(): void {
+    this.burst(0.45, 0.55, 900);
+    this.tone(180, 0.25, 'triangle', 0.25, 70);
+  }
+
+  /** Leiser Wasserschlag eines Armzugs, links und rechts leicht verschieden */
+  stroke(side: 'L' | 'R'): void {
+    this.burst(0.07, 0.14, side === 'L' ? 1500 : 1800, 'bandpass');
+  }
+
+  /** Husten nach dem Verschlucken */
+  choke(): void {
+    this.burst(0.12, 0.35, 1100, 'bandpass');
+    this.burst(0.12, 0.3, 900, 'bandpass', 0.18);
+    this.tone(160, 0.1, 'square', 0.06, 110, 0.02);
+  }
+
+  /** Einatmen: steigendes Rauschen */
+  breath(): void {
+    if (!this.ctx || !this.master || !this.noise) return;
+    const t = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noise;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(600, t);
+    filter.frequency.exponentialRampToValueAtTime(2400, t + 0.3);
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.02, t);
+    gain.gain.linearRampToValueAtTime(0.16, t + 0.25);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    src.connect(filter).connect(gain).connect(this.master);
+    src.start(t, Math.random() * 1.5);
+    src.stop(t + 0.4);
+  }
+
+  /** Warnung: Luft wird knapp */
+  lowAir(): void {
+    this.tone(1175, 0.07, 'square', 0.08);
+    this.tone(1175, 0.07, 'square', 0.08, undefined, 0.12);
+  }
+
+  /** Luftschnappen */
+  gasp(): void {
+    this.burst(0.25, 0.3, 2000, 'bandpass');
+    this.tone(500, 0.2, 'triangle', 0.12, 900);
+  }
+
+  /** Rollwende: Blubbern mit Stoß an der Wand */
+  flip(): void {
+    [700, 560, 450, 360].forEach((f, i) => this.tone(f, 0.05, 'square', 0.06, f * 0.8, i * 0.06));
+    this.burst(0.2, 0.3, 700, 'lowpass', 0.3);
+    this.tone(90, 0.15, 'triangle', 0.3, 50, 0.32);
+  }
+
+  /** Anschlagplatte im Ziel */
+  touch(): void {
+    this.tone(1568, 0.12, 'square', 0.1);
+  }
+
   /** Publikumsrauschen; `level` 0..1 */
   crowd(level: number): void {
     if (!this.ctx || !this.master || !this.noise) return;

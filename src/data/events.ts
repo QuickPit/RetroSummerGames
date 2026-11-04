@@ -1,6 +1,6 @@
 // Alle Disziplinen an einem Ort – das Menü und die Ergebnisse lesen hier.
 
-export type EventKey = '110h' | 'pole' | 'long' | 'bmx';
+export type EventKey = '110h' | 'pole' | 'long' | 'bmx' | 'swim';
 
 export interface EventInfo {
   key: EventKey;
@@ -66,6 +66,20 @@ export const EVENTS: readonly EventInfo[] = [
     bestLabel: 'HIGHSCORE',
     lowerIsBetter: false,
     format: (v) => `${Math.round(v)} P`,
+  },
+  {
+    key: 'swim',
+    name: '100 M FREISTIL',
+    scene: 'swim',
+    controls: [
+      ['PFEIL LINKS/RECHTS', 'IM TAKT TIPPEN = KRAULEN'],
+      ['PFEIL HOCH', 'ATMEN, BEVOR DIE LUFT AUSGEHT'],
+      ['LEERTASTE', 'STARTSPRUNG UND WENDE'],
+      ['NICHT HÄMMERN!', 'ZU SCHNELL = VERSCHLUCKEN'],
+    ],
+    bestLabel: 'BESTZEIT',
+    lowerIsBetter: true,
+    format: (v) => v.toFixed(2),
   },
 ];
 

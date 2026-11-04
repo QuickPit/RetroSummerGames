@@ -24,9 +24,10 @@ const DISCIPLINES = {
   pole: { scene: 'polevault' },
   long: { scene: 'longjump' },
   bmx: { scene: 'bmx' },
+  swim: { scene: 'swim' },
   wettkampf: { competition: true },
 };
-const BOT_OF_SCENE = { race: 'hurdles', polevault: 'pole', longjump: 'long', bmx: 'bmx' };
+const BOT_OF_SCENE = { race: 'hurdles', polevault: 'pole', longjump: 'long', bmx: 'bmx', swim: 'swim' };
 
 // ---------------------------------------------------------------- Bot im Browser
 // Läuft per page.evaluate im Spiel. Liest den Zustand der Szene in jedem Takt
@@ -53,7 +54,29 @@ function botInPage(kind) {
   };
   const HURDLES = Array.from({ length: 10 }, (_, i) => 13.72 + i * 9.14);
   const LOGS = [38, 110, 176];
-  const mem = { done: false, attempts: 0, holding: false, extended: false, planted: false, released: false, jumpCount: 0, inAir: false };
+  const mem = {
+    done: false,
+    attempts: 0,
+    holding: false,
+    extended: false,
+    planted: false,
+    released: false,
+    jumpCount: 0,
+    inAir: false,
+    turned: false,
+    failed: null,
+    nextTap: 0,
+  };
+  // Gleichmäßiger Takt nach Fahrplan – der Intervall-Timer allein würde die Rate drücken
+  const steadyTap = (rate) => {
+    const now = performance.now();
+    if (now < mem.nextTap) return;
+    const gap = 1000 / rate;
+    // Nach einem Ruckler nicht aufholen – zwei Tipps kurz hintereinander wären Hämmern
+    mem.nextTap = Math.max(mem.nextTap + gap, now + gap * 0.85);
+    press(side ? 'ArrowRight' : 'ArrowLeft');
+    side ^= 1;
+  };
 
   // Node setzt das Flag, wenn sein Zeitlimit greift – dann keine Tasten mehr schicken
   window.__botStop = false;
@@ -68,7 +91,7 @@ function botInPage(kind) {
       if (active('confirm')) return;
       if (active('result')) {
         clearInterval(timer);
-        resolve({ ok: true, log });
+        resolve(mem.failed ? { ok: false, log: [...log, `✗ ${mem.failed}`] } : { ok: true, log });
         return;
       }
       if (performance.now() - started > 140_000) {
@@ -165,6 +188,37 @@ function botInPage(kind) {
             mem.extended = true;
             press('Space');
           }
+        }
+      } else if (kind === 'swim') {
+        const sc = game.scene.getScene('swim');
+        if (sc.phase === 'ready') press('Enter');
+        if (sc.phase !== 'race') return;
+        const s = sc.player.state;
+        if (s.finishTime !== null) {
+          if (!mem.done) {
+            log.push(
+              `Zeit: ${s.finishTime.toFixed(2)} s, Wende: ${s.turnRating}, verschluckt: ${s.chokes}, ` +
+                `Luft geschnappt: ${s.gasps}, Atemzüge: ${s.breaths}, Takt: ${Math.round((s.inTakt / Math.max(1, s.strokes)) * 100)}%`,
+            );
+            if (s.finishTime >= 60) mem.failed = `Zeit ${s.finishTime.toFixed(2)} s nicht unter 60 s`;
+            else if (s.turnRating === 'open') mem.failed = 'Wende verpasst (angeschlagen)';
+            else if (s.gasps > 0) mem.failed = `${s.gasps}x nach Luft geschnappt`;
+          }
+          mem.done = true;
+          if (!sc.resultsShown) press('Enter');
+          return;
+        }
+        if (s.phase === 'block') {
+          press('Space');
+          return;
+        }
+        if (s.phase !== 'swim') return;
+        steadyTap(9.5);
+        if (s.air < 0.3 && s.breathing <= 0) press('ArrowUp');
+        // Rollwende am Idealabstand
+        if (!s.turned && !mem.turned && 50 - s.d <= s.v * 0.45) {
+          mem.turned = true;
+          press('Space');
         }
       } else if (kind === 'bmx') {
         const sc = game.scene.getScene('bmx');
