@@ -393,10 +393,10 @@ class Sfx {
     this.tone(880, 0.25, 'square', 0.16);
   }
 
-  /** Eintauchen nach dem Startsprung */
-  plunge(): void {
-    this.burst(0.45, 0.55, 900);
-    this.tone(180, 0.25, 'triangle', 0.25, 70);
+  /** Eintauchen nach dem Startsprung; `level` < 1 macht es leiser und heller (kleiner Spritzer) */
+  plunge(level = 1): void {
+    this.burst(0.25 + 0.2 * level, 0.3 + 0.25 * level, 900 + 500 * (1 - level));
+    this.tone(180, 0.25, 'triangle', 0.12 + 0.13 * level, 70);
   }
 
   /** Leiser Wasserschlag eines Armzugs, links und rechts leicht verschieden */
@@ -478,8 +478,8 @@ class Sfx {
   /** Luftzug je halbem Salto; `k` 0..1 = Anteil am Ziel, die Tonhöhe steigt */
   spinWhoosh(k: number): void {
     const f = 700 + 1500 * Math.max(0, Math.min(1.2, k));
-    this.burst(0.11, 0.14, f, 'bandpass');
-    this.tone(f / 4, 0.08, 'triangle', 0.04, f / 3);
+    this.burst(0.16, 0.2, f, 'bandpass');
+    this.tone(f / 4, 0.1, 'triangle', 0.05, f / 3);
   }
 
   /** Schnapp-Ton beim Öffnen */
@@ -493,10 +493,11 @@ class Sfx {
     this.burst(0.3, 0.06, 3000, 'highpass');
   }
 
-  /** Fast spritzerloses Eintauchen: kurzes „Plopp“ */
+  /** Fast spritzerloses Eintauchen: kurzes „Plopp“, danach blubbern ein paar Bläschen */
   rip(): void {
     this.tone(320, 0.09, 'triangle', 0.3, 110);
     this.burst(0.08, 0.12, 1200, 'bandpass');
+    [0.12, 0.2, 0.31].forEach((d, i) => this.tone(520 + i * 140, 0.04, 'triangle', 0.05, 900 + i * 160, d));
   }
 
   /** Klatscher auf das Wasser – laut und flach */
@@ -506,10 +507,24 @@ class Sfx {
     this.tone(95, 0.2, 'triangle', 0.4, 50);
   }
 
-  /** Kampfrichter klappt seine Tafel hoch */
+  /** Kampfrichter klappt seine Tafel hoch: Pappe raschelt, dazu ein heller Klick */
   cardFlip(): void {
-    this.burst(0.035, 0.25, 3200, 'highpass');
-    this.tone(1250, 0.03, 'square', 0.05);
+    this.burst(0.04, 0.16, 3200, 'highpass');
+    this.tone(1250, 0.03, 'square', 0.045);
+    this.tone(260, 0.04, 'triangle', 0.08, 180);
+  }
+
+  /** Beifall: viele kurze Klatscher, `strength` 0..1 bestimmt Dichte und Dauer */
+  applause(strength: number): void {
+    const k = Math.max(0, Math.min(1, strength));
+    const n = Math.round(12 + 40 * k);
+    const dur = 0.8 + 1.2 * k;
+    for (let i = 0; i < n; i++) {
+      const t = Math.random() * dur;
+      // Am Ende ebbt der Beifall ab
+      const vol = (0.08 + 0.1 * k) * (1 - (t / dur) * 0.7);
+      this.burst(0.025, vol, 1800 + Math.random() * 1600, 'bandpass', t);
+    }
   }
 
   /** Hochzählen der Punkte auf der Anzeigetafel */

@@ -351,7 +351,7 @@ export interface VerdictInfo {
 
 const COUNT_TIME = 0.6;
 
-/** Wertung auf der LED-Anzeigetafel (x120–520, y34–118) als Overlay; die Punkte zählen hoch. */
+/** Wertung auf der großen LED-Tafel (DIVE_HALL.verdict) als Overlay; die Punkte zählen hoch. */
 export class VerdictBoard {
   private readonly g: Gfx;
   private readonly texts: Phaser.GameObjects.Text[];
@@ -359,11 +359,11 @@ export class VerdictBoard {
   private shownAt = 0;
 
   constructor(scene: Phaser.Scene) {
-    const { x, y, w } = DIVE_HALL.board;
+    const { x, y, w } = DIVE_HALL.verdict;
     const cx = x + w / 2;
     // Die Tafel liegt vor dem Turm, damit nichts in die Schrift ragt
     this.g = scene.add.graphics().setDepth(149).setVisible(false);
-    drawLedBoard(this.g);
+    drawLedBoard(this.g, DIVE_HALL.verdict);
     const t = (dy: number, size: number, color: string) =>
       scene.add
         .text(cx, y + dy, '', { fontFamily: FONT, fontSize: `${size}px`, color })

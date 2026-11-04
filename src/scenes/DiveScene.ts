@@ -5,6 +5,7 @@ import { COUNTRIES, countryByCode, type Country } from '../data/countries';
 import { getCompetition } from '../data/session';
 import { loadLookSeed } from '../data/storage';
 import {
+  DIVER_SCALE,
   blendPose,
   bombPose,
   diverStandPose,
@@ -16,12 +17,14 @@ import {
   drawEntrySplash,
   drawJudge,
   flatPose,
+  glidePose,
   judgeLook,
   linePose,
   positionPose,
   splashDrops,
   treadPose,
   twistPose,
+  type JudgeReaction,
 } from '../gfx/diver';
 import { CARD_STEP, CARD_STRIKE, DiveHud, DiveSelect, JudgeCards, VerdictBoard, drawTaktScale, type DiveSelectRow } from '../gfx/diveHud';
 import { JumpBoard, type JumpBoardRow } from '../gfx/jumpBoard';
@@ -82,6 +85,8 @@ const CPU_SCORE_MS = 800;
 /** Ansagen am Turm stehen rechts vom Springer */
 const TOWER_MSG = { x: 430, y: 44 };
 const POOL_MSG = { x: GAME_WIDTH / 2, y: 136 };
+/** Hüfte bis Kopfmitte in Pixeln (ungedreht, ohne Vergrößerung) */
+const BODY_TO_HEAD = 21;
 
 type Phase = 'board' | 'select' | 'attempt';
 
@@ -117,6 +122,25 @@ function ratingText(j: Judgement, def: DiveDef): { text: string; color: string }
   return RATING_TEXT[j.rating];
 }
 
+/**
+ * Kopfzeile der Wertung: das Urteil über die Ausführung (die Tippzeile darunter gibt den Rat).
+ * Fehlsprünge heißen nach ihrer Art, sonst entscheidet die Basisnote.
+ */
+function verdictTitle(j: Judgement, def: DiveDef): { text: string; color: string } {
+  const red = '#e8442e';
+  if (j.rating === 'bomb') {
+    return { text: def.position === 'tuck' ? 'ARSCHBOMBE!' : def.position === 'pike' ? 'KLAPPMESSER!' : 'FEHLSPRUNG', color: red };
+  }
+  if (j.rating === 'belly' || j.rating === 'back') return { text: 'KLATSCHER!', color: red };
+  if (j.rating === 'wrong') return { text: 'FEHLSPRUNG', color: red };
+  if (j.base >= 9) return { text: 'WELTKLASSE!', color: '#f7c843' };
+  if (j.base >= 8) return { text: 'SEHR GUTER SPRUNG', color: '#4cd964' };
+  if (j.base >= 7) return { text: 'GUTER SPRUNG', color: '#4cd964' };
+  if (j.base >= 5.5) return { text: 'ORDENTLICH', color: '#f7d038' };
+  if (j.base >= 4) return { text: 'WACKELIG', color: '#f08a24' };
+  return { text: 'MISSGLÜCKT', color: '#f08a24' };
+}
+
 function tipText(tip: DiveTip, j: Judgement | null): string {
   switch (tip) {
     case 'notOpened':
@@ -142,9 +166,12 @@ function tipText(tip: DiveTip, j: Judgement | null): string {
     case 'moreHeight':
       return 'MEHR HÖHE – SCHNELLER TIPPEN (IDEAL 11/S)';
     case 'dream':
-      return 'TRAUMSPRUNG – BESSER GEHT ES KAUM!';
+      return 'BESSER GEHT ES KAUM – GENAU SO WEITER!';
     case 'clean':
-      return 'SAUBERER SPRUNG!';
+      // Nichts Grobes falsch: Rat zum Feinschliff an der schwächsten Stelle
+      if (j && j.quality < 0.9) return 'FEINSCHLIFF: GENAU IM HOCHPUNKT ABSPRINGEN';
+      if (j && Math.abs(j.delta) > DIVE.perfectAngle) return 'FEINSCHLIFF: GANZ SENKRECHT EINTAUCHEN';
+      return 'FEINSCHLIFF: NOCH ETWAS MEHR SCHWUNG';
   }
 }
 
@@ -191,6 +218,11 @@ export class DiveScene extends Phaser.Scene {
   private drops: Drop[] = [];
   private messageUntil = 0;
   private lastSwing: number | null = null;
+  /** Reaktion der Kampfrichter beim Eintauchen (Nicken/Kopfschütteln) */
+  private judgeReact: { kind: JudgeReaction['kind']; at: number } | null = null;
+  /** Kopfschütteln nach dem Auftauchen: zuletzt gezeichnete Blickrichtung (für die Tropfen) */
+  private shakeDir: 1 | -1 = 1;
+  private dripAt = 0;
   /** Tipps der eigenen Sprünge für die Notiz im Ergebnis */
   private tips: DiveTip[] = [];
 
@@ -215,6 +247,7 @@ export class DiveScene extends Phaser.Scene {
     this.drops = [];
     this.messageUntil = 0;
     this.lastSwing = null;
+    this.judgeReact = null;
     this.tips = [];
   }
 
@@ -278,6 +311,8 @@ export class DiveScene extends Phaser.Scene {
       rate: cpuDiveRate(profile, Math.random),
     }));
     this.entrants = Phaser.Utils.Array.Shuffle([this.player, ...cpus]);
+    // Am Turm wehen die Fahnen der Nationen, die heute springen
+    this.hall.setFlags(this.entrants.map((e) => e.country.flag));
     this.officials = DIVE_HALL.judgeX.map((_, i) => judgeLook(createLook(country, 4242 + i * 17, 0)));
   }
 
@@ -379,11 +414,13 @@ export class DiveScene extends Phaser.Scene {
     this.selectPanel.setVisible(false);
     this.hud.setVisible(true);
     this.hud.setInfo(this.round + 1, def, diverTotal(this.player.competitor));
-    this.hall.setBoard(this.player.country.name, def.name);
+    // Sprungansage: blinkt kurz auf der Hallentafel, die rechts oben weit weg von der Flugbahn hängt
+    this.hall.setBoard(this.player.country.name, def.name, true);
     this.diver = createDive(def);
     this.judgement = null;
     this.verdictReady = false;
     this.surfacedAt = null;
+    this.judgeReact = null;
     this.drops = [];
     this.anchor = performance.now();
     this.hud.setMessage('', '');
@@ -654,13 +691,16 @@ export class DiveScene extends Phaser.Scene {
     this.entryAt = this.elapsed;
     this.drops.push(...splashDrops(j.splash, this.entryX));
     if (j.splash === 0) sfx.rip();
-    else if (j.splash < 3) sfx.plunge();
+    else if (j.splash < 3) sfx.plunge(j.splash === 1 ? 0.55 : 1);
     else {
       sfx.slap();
       sfx.missed();
       this.cameras.main.shake(120, 0.004);
     }
     if (j.splash === 3) sfx.crowd(0.05);
+    // Die Kampfrichter reagieren sofort: Nicken bei sauberem Eintauchen, Kopfschütteln beim Fehlsprung
+    if (j.fail || j.splash === 3) this.judgeReact = { kind: 'shake', at: this.elapsed };
+    else if (j.rating === 'perfect' || j.rating === 'clean') this.judgeReact = { kind: 'nod', at: this.elapsed };
     const r = ratingText(j, s.def);
     this.flash(r.text, '', r.color, 3, 24, POOL_MSG);
   }
@@ -668,16 +708,19 @@ export class DiveScene extends Phaser.Scene {
   private onSurface(): void {
     const j = this.judgement!;
     this.surfacedAt = this.elapsed;
+    this.shakeDir = 1;
+    this.drops.push(...splashDrops(1, this.entryX + 30).slice(0, 6));
     this.cards.show(j.notes, j.dropped, this.elapsed);
     for (let i = 0; i < 5; i++) this.time.delayedCall(i * CARD_STEP * 1000, () => sfx.cardFlip());
     sfx.crowd(j.base >= 8 ? 1 : j.base <= 3 ? 0.15 : 0.55);
+    if (j.base >= 6) sfx.applause((j.base - 6) / 4);
     if (j.base >= 8) sfx.finish();
   }
 
   private showVerdict(): void {
     const s = this.diver!;
     const j = this.judgement!;
-    const r = ratingText(j, s.def);
+    const r = verdictTitle(j, s.def);
     this.hud.setMessage('');
     this.messageUntil = this.elapsed;
     this.hall.setBoardTextVisible(false);
@@ -709,8 +752,12 @@ export class DiveScene extends Phaser.Scene {
     const g = this.judgeGfx;
     g.clear();
     if (this.camY > 170) return;
+    const react = this.judgeReact;
     DIVE_HALL.judgeX.forEach((x, i) => {
-      drawJudge(g, x, DIVE_HALL.judgeSeatY + this.camY, this.officials[i], this.cards.raise(i, this.elapsed), this.elapsed + i);
+      // Leicht versetzt, damit nicht alle gleichzeitig nicken
+      const age = react ? this.elapsed - react.at - i * 0.07 : -1;
+      const r: JudgeReaction | null = react && age >= 0 ? { kind: react.kind, age } : null;
+      drawJudge(g, x, DIVE_HALL.judgeSeatY + this.camY, this.officials[i], this.cards.raise(i, this.elapsed), this.elapsed + i, r);
     });
   }
 
@@ -763,15 +810,15 @@ export class DiveScene extends Phaser.Scene {
       case 'walk': {
         const u = Math.min(1, (s.time - s.phaseStart) / DIVE.walkTime);
         const pose = diverWalkPose(u);
-        drawDiver(g, edgeHip - (1 - u) * WALK_PX, platformY - pose.hip, pose, look, { time: t });
+        drawDiver(g, edgeHip - (1 - u) * WALK_PX, platformY - pose.hip * DIVER_SCALE, pose, look, { time: t });
         return;
       }
       case 'ready':
       case 'swing': {
         const lift = armLift(s);
         const pose = s.phase === 'ready' ? diverStandPose() : diverSwingPose(lift, s.swing);
-        drawDiver(g, edgeHip, platformY - pose.hip, pose, look, { time: t, mood: s.swing > 0.8 ? 'effort' : 'neutral' });
-        drawTaktScale(g, edgeHip + 22, platformY - 62, lift);
+        drawDiver(g, edgeHip, platformY - pose.hip * DIVER_SCALE, pose, look, { time: t, mood: s.swing > 0.8 ? 'effort' : 'neutral' });
+        drawTaktScale(g, edgeHip + 24, platformY - 66, lift);
         return;
       }
       case 'air': {
@@ -791,11 +838,14 @@ export class DiveScene extends Phaser.Scene {
           const from = s.autoTakeoff && since < 0.15 ? diverTakeoffPose() : positionPose(def.position);
           pose = blendPose(from, linePose(), (s.time - (s.openAt ?? s.time)) / POSE_BLEND);
         }
-        drawDiver(g, x, hipY, pose, look, {
+        // Am Turm steht der (größer gezeichnete) Springer etwas höher als die Hüfte der Sim – kurz angleichen
+        const lift = (DIVER_SCALE - 1) * 25 * Math.max(0, 1 - since / 0.3);
+        drawDiver(g, x, hipY - lift, pose, look, {
           rotation: (s.rot * Math.PI) / 180,
           twist: twistPhase,
           mood: 'effort',
           time: t,
+          pointToes: since > 0.06,
         });
         return;
       }
@@ -808,43 +858,78 @@ export class DiveScene extends Phaser.Scene {
     }
   }
 
-  /** Abtauchen und Gleiten unter Wasser, Klatscher kurz flach auf der Oberfläche */
+  /** Abtauchen, Gleiten mit Delfin-Beinschlag und Aufsteigen; Klatscher liegen erst kurz flach auf dem Wasser */
   private drawUnderwater(g: Phaser.GameObjects.Graphics, s: DiveState, waterY: number): void {
     const te = s.time - s.entryAt!;
     const look = this.player.look;
     const rot = (s.rot * Math.PI) / 180;
     const slap = s.rating === 'belly' || s.rating === 'back';
-    if (slap && te < 0.3) {
-      // Flach auf dem Wasser liegen
+    if (slap && te < 0.35) {
+      // Flach auf dem Wasser liegen, dann sinkt er ein
       const lie = s.rating === 'belly' ? Math.PI / 2 : -Math.PI / 2;
-      drawDiver(g, this.entryX + 4, waterY - 3, flatPose(), look, { rotation: lie, mood: 'ouch', time: this.elapsed });
+      drawDiver(g, this.entryX + 4, waterY - 3 + te * 10, flatPose(), look, { rotation: lie, mood: 'ouch', time: this.elapsed });
       return;
     }
-    // Abtauchen (bremst im Wasser), dann schräg nach vorne gleiten
+    // Abtauchen (bremst im Wasser), dann schräg nach vorne gleiten und zur Oberfläche steigen
     const sink = Math.min(1, te / 0.45);
     const depth = 50 * (1 - (1 - sink) * (1 - sink)) - Math.max(0, te - 0.6) * 30;
     const glide = Math.max(0, te - 0.4);
     const x = this.entryX + 4 + glide * 30;
     const hipY = waterY - 26 + 26 * Math.min(1, te / 0.12) + depth;
-    const pose = s.rating === 'bomb' ? bombPose() : linePose();
-    const level = Math.round(rot / (2 * Math.PI)) * 2 * Math.PI;
-    const angle = s.rating === 'bomb' ? rot : Phaser.Math.Linear(rot, level + Math.PI * 0.6, Math.min(1, glide / 0.6));
-    drawDiver(g, x, hipY, pose, look, { rotation: angle, time: this.elapsed });
+    if (s.rating === 'bomb') {
+      // Nicht geöffnet: in der Sprungposition (gehockt als Kugel) ins Wasser
+      const pose = s.def.position === 'tuck' ? bombPose() : positionPose(s.def.position);
+      drawDiver(g, x, hipY, pose, look, { rotation: rot, time: this.elapsed, mood: 'ouch', pointToes: true });
+      drawBubbles(g, x + 4, hipY - 6, this.elapsed, 8);
+      return;
+    }
+    // Kopf zeigt erst schräg nach vorne unten, dann nach vorne oben (Winkel relativ zur Eintauchlage)
+    const mod = ((s.rot % 360) + 360) % 360;
+    const down = rot - ((mod - 115) * Math.PI) / 180;
+    const up = rot - ((mod - 70) * Math.PI) / 180;
+    const k1 = Phaser.Math.Clamp((te - 0.3) / 0.45, 0, 1);
+    const k2 = Phaser.Math.Clamp((te - 0.75) / 0.45, 0, 1);
+    const angle = Phaser.Math.Linear(Phaser.Math.Linear(rot, down, k1), up, k2);
+    drawDiver(g, x, hipY, glidePose(te), look, { rotation: angle, time: this.elapsed, pointToes: true });
+    // Luftbläschen steigen von Mund und Füßen auf
     drawBubbles(g, x + 6, hipY - 4, this.elapsed, 5);
+    drawBubbles(g, x - 10, hipY + 2, this.elapsed + 0.4, 3);
   }
 
-  /** Aufgetaucht: winken oder den Kopf schütteln */
+  /** Aufgetaucht: Wassertreten und winken – oder den Kopf schütteln, dass die Tropfen fliegen */
   private drawSurfaced(g: Phaser.GameObjects.Graphics, waterY: number): void {
     const j = this.judgement;
     const happy = j !== null && !j.fail && j.base >= 6;
     const since = this.surfacedAt !== null ? this.elapsed - this.surfacedAt : 0;
-    const pose = treadPose(this.elapsed, happy);
+    const shaking = !happy && since > 0.25 && since < 1.5;
+    const dir: 1 | -1 = shaking && Math.floor(since * 7) % 2 === 1 ? -1 : 1;
     const x = this.entryX + 30;
-    // Kopfschütteln: kurz nach links und rechts schauen
-    const shake = !happy && since < 1.2 && Math.floor(since * 6) % 2 === 1;
+    const rise = 1 - Math.pow(1 - Math.min(1, since / 0.35), 2);
+    const hipY = waterY + 30 - 18 * rise + Math.sin(this.elapsed * 3) * 1;
+    const headH = waterY - (hipY - (BODY_TO_HEAD * DIVER_SCALE));
+    // Bei jedem Kopfrucken fliegen Tropfen aus den Haaren
+    if (dir !== this.shakeDir) {
+      this.shakeDir = dir;
+      for (let i = 0; i < 4; i++) {
+        this.drops.push({
+          x: x + dir * 4,
+          h: headH,
+          vx: -dir * (40 + Math.random() * 50),
+          vh: 20 + Math.random() * 40,
+          life: 0.5,
+          size: Math.random() < 0.5 ? 1 : 2,
+        });
+      }
+    }
+    // Wasser tropft aus den Haaren
+    if (since > 0.3 && this.elapsed >= this.dripAt) {
+      this.dripAt = this.elapsed + 0.35 + Math.random() * 0.3;
+      this.drops.push({ x: x + (Math.random() - 0.5) * 8, h: headH - 4, vx: 0, vh: -5, life: 0.6, size: 1 });
+    }
+    const pose = treadPose(this.elapsed, happy, shaking ? 1 : 0);
     const mood: Mood = happy ? 'joy' : j?.fail ? 'ouch' : 'tired';
-    const rise = Math.min(1, since / 0.3);
-    drawDiver(g, x, waterY + 16 - rise * 4, pose, this.player.look, { mood, time: this.elapsed, dir: shake ? -1 : 1 });
-    drawWaterRing(g, x, waterY, 12, this.elapsed);
+    drawDiver(g, x, hipY, pose, this.player.look, { mood, time: this.elapsed, dir, waterY });
+    drawWaterRing(g, x, waterY, 10 + Math.sin(this.elapsed * 2) * 2, this.elapsed);
+    if (since < 0.6) drawWaterRing(g, x, waterY, 6 + since * 30, this.elapsed + 1);
   }
 }

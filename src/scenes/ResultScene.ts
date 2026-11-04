@@ -57,7 +57,7 @@ export class ResultScene extends Phaser.Scene {
   private podiumGfx!: Phaser.GameObjects.Graphics;
   /** Schwimmhalle als Kulisse (nur bei Hallen-Disziplinen) */
   private hall: SwimHall | null = null;
-  private clock = 0;
+  private clock: number | string = 0;
   private elapsed = 0;
   /** Szenenwechsel ist angestoßen – keine weiteren Tasten */
   private leaving = false;
@@ -83,8 +83,9 @@ export class ResultScene extends Phaser.Scene {
     const eventNo = (COMPETITION_ORDER as readonly EventKey[]).indexOf(event.key) + 1;
     // Kulisse je Disziplin: Schwimmen in der Halle (mit Hallenklang), sonst im Stadion
     this.hall = null;
-    // Die Hallenuhr zeigt nur Zeiten (Punkte passen nicht hinein)
-    this.clock = event.lowerIsBetter ? (this.result.playerScore ?? 0) : 0;
+    // Die Hallenuhr zeigt Zeiten; bei Punkte-Disziplinen (Turmspringen) die eigenen Punkte
+    const score = this.result.playerScore ?? 0;
+    this.clock = event.lowerIsBetter ? score : score.toFixed(2);
     if (event.venue === 'hall') {
       this.hall = new SwimHall(this).asBackdrop();
       this.hall.update(HALL_CAM_PX, 0, 0, 0.5, this.clock);

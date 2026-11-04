@@ -77,6 +77,8 @@ export interface DrawOptions {
   barefoot?: boolean;
   /** Wasseroberfläche (Bildschirm-Y, nur ohne Drehung): Teile darunter liegen im Wasser */
   waterY?: number;
+  /** Gestreckte Fußspitzen (Turmspringer in der Luft) */
+  pointToes?: boolean;
 }
 
 /** Farbe, zu der Körperteile unter Wasser hin gemischt werden */
@@ -518,12 +520,12 @@ interface Palette {
   sock: number;
 }
 
-function legPieces(hx: number, hy: number, leg: Limb, c: Palette): Piece[] {
+function legPieces(hx: number, hy: number, leg: Limb, c: Palette, point = false): Piece[] {
   const [kx, ky] = along(hx, hy, leg.upper, THIGH);
   const [ax, ay] = along(kx, ky, leg.lower, SHIN);
-  // Fuß zeigt nach vorne und kippt mit dem Unterschenkel
-  const fdx = Math.cos(leg.lower);
-  const fdy = -Math.sin(leg.lower);
+  // Fuß zeigt nach vorne und kippt mit dem Unterschenkel – gestreckt verlängert er das Bein
+  const fdx = point ? Math.sin(leg.lower + 0.35) : Math.cos(leg.lower);
+  const fdy = point ? Math.cos(leg.lower + 0.35) : -Math.sin(leg.lower);
   const [sx, sy] = lerp2(kx, ky, ax, ay, 0.72);
   const [shx, shy] = lerp2(hx, hy, kx, ky, 0.55);
   return [
@@ -835,7 +837,7 @@ function drawFigure(g: Gfx, hx: number, hy: number, pose: Pose, look: RunnerLook
   };
 
   pieces(armPieces(sx, sy, pose.farArm, far));
-  pieces(legPieces(hx, hy, pose.farLeg, far));
+  pieces(legPieces(hx, hy, pose.farLeg, far, opts.pointToes));
 
   // Oberkörper: Trikot, Shorts-Bund, Seitenstreifen, Glanzlicht
   const [bx, by] = lerp2(hx, hy, sx, sy, 0.24);
@@ -858,7 +860,7 @@ function drawFigure(g: Gfx, hx: number, hy: number, pose: Pose, look: RunnerLook
   drawHead(g, headX, headY, look, mood, time, speed, opts.helmet, opts.cap);
 
   if (!swim) drawHipNumber(g, hx - 3, hy, look.number);
-  pieces(legPieces(hx, hy, pose.nearLeg, near));
+  pieces(legPieces(hx, hy, pose.nearLeg, near, opts.pointToes));
   pieces(armPieces(sx, sy, pose.nearArm, near));
 }
 

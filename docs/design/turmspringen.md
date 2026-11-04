@@ -202,12 +202,12 @@ in der Beckenansicht. Hallenwand und Dach haben die Parallaxe 0,5.
 ```
 Beckenansicht (camY = 0)
 y  0– 24  HUD oben: TURMSPRINGEN · {n}. SPRUNG · Sprungname · SG · rechts GESAMT
-y 24–150  Hallendach/-wand mit Fensterband, Anzeigetafel (LED, Orange wie die Hallenuhr)
+y 24–150  Hallendach/-wand mit Fensterband, Bannern und Wimpelkette, Anzeigetafel rechts oben (LED, x300–628, y34–86)
 y150–196  Tribüne mit Publikum (2 Jubel-Frames, Texturen aus pool.ts)
 y196–232  hinterer Umgang: 5 Kampfrichter auf Hochstühlen (x 344…568, Abstand 56)
 y232–318  Sprungbecken ohne Bahnen, tiefblau, Wasserrauhung (Sprudel-Kringel an der Oberfläche)
 y318–326  vorderer Beckenrand · y326–360 HUD unten
-Links x 40–200: Betonturm mit Plattformen 3/5/7,5/10 m, Leitern, Geländer, Fahnen
+Links x 40–200: Betonturm mit Plattformen 3/5/7,5/10 m, Höhenschildern, Leiter, Geländer, Fahnen der 4 Nationen des Feldes
 ```
 
 - **Springer (`gfx/diver.ts`):** Badeanzug in Trikotfarbe, ohne Kappe, Mimik aus `mood`.
@@ -234,8 +234,12 @@ Links x 40–200: Betonturm mit Plattformen 3/5/7,5/10 m, Leitern, Geländer, Fa
 - **Kampfrichter:** Figuren im Blazer (wie der Weitsprung-Offizielle) auf Stühlen. Nach dem Auftauchen heben sie ihre **Tafeln**
   mit 0,15 s Abstand (weiß, 52×26 px, Note in 16 px, schwarz, bei y 170). Nach 0,5 s werden die gestrichenen Tafeln grau mit
   roter Diagonale.
-- **Anzeigetafel (Overlay x120–520, y34–118):**
-  - Bewertung (16 px, Farbe nach Güte)
+- **Hallentafel** (rechts oben, weit weg von Turm und Flugbahn): Nation und Sprungname, blinkt bei der Ansage kurz.
+- **Wertungstafel (Overlay x220–628, y34–118, deckt die Hallentafel ab):**
+  - Urteil über die Ausführung (16 px, Farbe nach Güte), nach der Basisnote: `WELTKLASSE!` ≥ 9 · `SEHR GUTER SPRUNG` ≥ 8 ·
+    `GUTER SPRUNG` ≥ 7 · `ORDENTLICH` ≥ 5,5 · `WACKELIG` ≥ 4 · sonst `MISSGLÜCKT`; Fehlsprünge: `ARSCHBOMBE!` / `KLAPPMESSER!`
+    (nicht geöffnet, gehockt/gehechtet), `KLATSCHER!`, sonst `FEHLSPRUNG`. Die Tippzeile darunter ist nur der Rat –
+    so steht nichts doppelt.
   - `25.5 × 3.2 = 81.60` (16 px, zählt in 0,6 s hoch)
   - Tipp-Zeile (8 px)
   - Messwerte (8 px grau)
@@ -269,7 +273,7 @@ Links x 40–200: Betonturm mit Plattformen 3/5/7,5/10 m, Leitern, Geländer, Fa
 | Bereit | `{SPRUNGNAME}` (16 px) / `SG {dd}   NÖTIGER SCHWUNG {p}%` · `PFEIL LINKS/RECHTS: SCHWUNG HOLEN` · `LEERTASTE, WENN DIE ARME OBEN SIND` · Leertaste ohne Schwung: `ERST SCHWUNG HOLEN!` |
 | Absprung | ab Güte 0,75 `GUTER ABSPRUNG` (grün, 0,6 s), sonst keine Meldung. Automatisch: `ABSPRUNG VERPASST` (rot) |
 | Eintauchen (24 px) | `PERFEKT!` (gold) · `SAUBER!` · `ZU FRÜH GEÖFFNET` · `ZU SPÄT GEÖFFNET` · `BAUCHKLATSCHER!` · `RÜCKENKLATSCHER!` · `ARSCHBOMBE!` (Hocke) / `KLAPPMESSER!` (Hecht) / `NICHT GEÖFFNET!` (gestreckt) · `SALTO FEHLT!` / `SALTO ZU VIEL!` |
-| Tipp (eine Zeile, erste zutreffende) | 1. nicht geöffnet: `NICHT GEÖFFNET – LEERTASTE VOR DEM WASSER LOS` · 2. zu wenig gedreht (δ < −20°) und `power < minPower`: `ZU WENIG SCHWUNG – LEICHTEREN SPRUNG WÄHLEN` · 3. `wrong`, δ < 0: `SALTO FEHLT – LEERTASTE LÄNGER HALTEN`; δ > 0: `SALTO ZU VIEL – FRÜHER LOSLASSEN` · 4. δ < −20°: `ZU FRÜH GEÖFFNET – LEERTASTE LÄNGER HALTEN` · 5. δ > 20° oder line < 0,25 s: `ZU SPÄT GEÖFFNET – FRÜHER LOSLASSEN` · 6. Schraube offen: `SCHRAUBE NICHT FERTIG – FRÜHER PFEIL HOCH`; fehlt: `SCHRAUBE FEHLT – {n}X PFEIL HOCH DRÜCKEN` · 7. Güte < 0,6: `ABSPRUNG ZU FRÜH – ARME GANZ OBEN ABWARTEN` / `ABSPRUNG ZU SPÄT – LEERTASTE, WENN ARME OBEN` · 8. Schwung < 0,85: `MEHR HÖHE – SCHNELLER TIPPEN (IDEAL 11/S)` · 9. Basis ≥ 9: `TRAUMSPRUNG – BESSER GEHT ES KAUM!`, sonst `SAUBERER SPRUNG!` |
+| Tipp (eine Zeile, erste zutreffende) | 1. nicht geöffnet: `NICHT GEÖFFNET – LEERTASTE VOR DEM WASSER LOS` · 2. zu wenig gedreht (δ < −20°) und `power < minPower`: `ZU WENIG SCHWUNG – LEICHTEREN SPRUNG WÄHLEN` · 3. `wrong`, δ < 0: `SALTO FEHLT – LEERTASTE LÄNGER HALTEN`; δ > 0: `SALTO ZU VIEL – FRÜHER LOSLASSEN` · 4. δ < −20°: `ZU FRÜH GEÖFFNET – LEERTASTE LÄNGER HALTEN` · 5. δ > 20° oder line < 0,25 s: `ZU SPÄT GEÖFFNET – FRÜHER LOSLASSEN` · 6. Schraube offen: `SCHRAUBE NICHT FERTIG – FRÜHER PFEIL HOCH`; fehlt: `SCHRAUBE FEHLT – {n}X PFEIL HOCH DRÜCKEN` · 7. Güte < 0,6: `ABSPRUNG ZU FRÜH – ARME GANZ OBEN ABWARTEN` / `ABSPRUNG ZU SPÄT – LEERTASTE, WENN ARME OBEN` · 8. Schwung < 0,85: `MEHR HÖHE – SCHNELLER TIPPEN (IDEAL 11/S)` · 9. Basis ≥ 9: `BESSER GEHT ES KAUM – GENAU SO WEITER!`, sonst Feinschliff an der schwächsten Stelle: `FEINSCHLIFF: GENAU IM HOCHPUNKT ABSPRINGEN` (Güte < 0,9) / `FEINSCHLIFF: GANZ SENKRECHT EINTAUCHEN` (> 8°) / `FEINSCHLIFF: NOCH ETWAS MEHR SCHWUNG` |
 | Messwerte | `ABSPRUNG 92%   SCHWUNG 95%   EINTAUCHEN 4°` |
 | Ergebnis | Kopfzeilen `PUNKTE` · `SERIE` (`254.35` · `84.80 62.40 70.20`) · Notizen: `BESTER SPRUNG: {SPRUNGNAME} {P}` und den Tipp, der in der Serie am häufigsten kam (bei Gleichstand der mit der höheren Priorität) |
 
@@ -286,12 +290,12 @@ Das Zeichen ½ ist in der Schrift vorhanden. Ist es in den Screenshots bei 8 px 
 | `spinWhoosh(n)` | je ½ Salto, Tonhöhe steigt zum Ziel hin |
 | `open()` | kurzer Schnapp-Ton |
 | `twist()` | Sirr-Sweep |
-| `rip()` | Eintauchen bei Spritzer 0: kurzes „Plopp“ |
-| `plunge()` | Spritzer 1–2 (aus RSG-06) |
+| `rip()` | Eintauchen bei Spritzer 0: kurzes „Plopp“, danach Bläschen |
+| `plunge(level)` | Spritzer 1 (leiser, heller) und 2 (aus RSG-06) |
 | `slap()` | Spritzer 3: lauter Klatsch; dazu „Ohhh“ des Publikums (`crowd` kurz abfallend) |
 | `cardFlip()` | je Tafel |
 | `scoreCount()` | Hochzählen der Summe |
-| Abschluss | `crowd()` nach der Basisnote (≥ 8 laut, ≤ 3 leise) |
+| Abschluss | `crowd()` nach der Basisnote (≥ 8 laut, ≤ 3 leise), ab Basis 6 `applause()` (dichter, je besser) |
 
 ## Wettkampf und Medaillenspiegel
 

@@ -251,7 +251,7 @@ export class TitleScene extends Phaser.Scene {
       for (let i = 0; i < 4; i++) g.fillRect(30 + ((i * 23 + Math.floor(this.elapsed * 12)) % 70), y + 17, 4, 1);
       const lift = Math.abs(1 - 2 * ((this.elapsed + 0.25) % 1));
       const pose = diverSwingPose(lift, 0.8);
-      drawDiver(g, x, y - pose.hip, pose, this.look, { time: this.elapsed });
+      drawDiver(g, x, y - pose.hip, pose, this.look, { time: this.elapsed, scale: 1 });
       return;
     }
     if (key === 'swim') {
