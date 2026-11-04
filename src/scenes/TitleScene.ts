@@ -3,29 +3,42 @@ import { sfx } from '../audio/sfx';
 import { COLORS, FONT, GAME_WIDTH } from '../config';
 import { COUNTRIES } from '../data/countries';
 import { EVENTS } from '../data/events';
+import { endCompetition, setCompetition } from '../data/session';
 import {
   loadBest,
   loadCountryIndex,
   loadEventIndex,
   loadLookSeed,
+  loadMode,
   saveCountryIndex,
   saveEventIndex,
   saveLookSeed,
+  saveMode,
+  type GameMode,
 } from '../data/storage';
 import { drawFlag } from '../gfx/flags';
 import { drawBmx } from '../gfx/bike';
 import { carryPole, createLook, drawRunner, drawShadow, handOffset, idlePose, type RunnerLook } from '../gfx/runner';
 import { Stadium } from '../gfx/stadium';
+import { createCompetition } from '../sim/competition';
 
 const STRIPES = [0xf7d038, 0xf08a24, 0xe8442e, 0xc42f6e, 0x7a3fc4];
-const ROWS = ['DISZIPLIN', 'NATION', 'ATHLET'] as const;
-const ROW_Y = [124, 154, 184];
-const PANEL = { x: 100, y: 112, w: GAME_WIDTH - 200, h: 100 };
+const ROWS = ['MODUS', 'DISZIPLIN', 'NATION', 'ATHLET'] as const;
+const ROW_Y = [118, 144, 170, 196];
+const PANEL = { x: 100, y: 106, w: GAME_WIDTH - 200, h: 112 };
 const VALUE_X = 370;
-const HELP_Y = 228;
+const HELP_Y = 232;
+const ROW = { mode: 0, event: 1, nation: 2, look: 3 };
+const COMPETITION_HELP: [string, string][] = [
+  ['REIHENFOLGE', 'HÜRDEN - WEIT - STAB - BMX'],
+  ['WERTUNG', 'MEDAILLENSPIEGEL DER NATIONEN'],
+  ['STEUERUNG', 'VOR JEDER DISZIPLIN ERKLÄRT'],
+  ['PFEIL HOCH/RUNTER', 'MENÜ: ZEILE WÄHLEN'],
+];
 
 export class TitleScene extends Phaser.Scene {
   private stadium!: Stadium;
+  private mode: GameMode = 'single';
   private eventIndex = 0;
   private countryIndex = 0;
   private lookSeed = 1;
@@ -46,6 +59,7 @@ export class TitleScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.mode = loadMode();
     this.eventIndex = loadEventIndex() % EVENTS.length;
     this.countryIndex = loadCountryIndex() % COUNTRIES.length;
     this.lookSeed = loadLookSeed();
@@ -77,7 +91,7 @@ export class TitleScene extends Phaser.Scene {
     grd.addColorStop(0.8, '#f08a24');
     logo.setFill(grd);
 
-    // Menü: Disziplin, Nation, Aussehen
+    // Menü: Modus, Disziplin, Nation, Aussehen
     this.menuGfx = this.add.graphics();
     ROWS.forEach((label, i) => {
       this.labels.push(text(PANEL.x + 12, ROW_Y[i] + 4, label));
@@ -95,10 +109,10 @@ export class TitleScene extends Phaser.Scene {
       this.helpTexts.push(text(276, HELP_Y + i * 14, ''));
     }
 
-    this.bestText = text(GAME_WIDTH / 2, 296, '', 8, '#4cd964').setOrigin(0.5, 0);
+    this.bestText = text(GAME_WIDTH / 2, 298, '', 8, '#4cd964').setOrigin(0.5, 0);
     const prompt = text(GAME_WIDTH / 2, 318, 'ENTER = START', 16).setOrigin(0.5, 0).setStroke('#10101c', 4);
     this.tweens.add({ targets: prompt, alpha: 0.25, duration: 550, yoyo: true, repeat: -1 });
-    text(GAME_WIDTH - 6, 350, 'v0.5 SOLO', 8, '#5d6278').setOrigin(1, 0);
+    text(GAME_WIDTH - 6, 350, 'v0.6 SOLO', 8, '#5d6278').setOrigin(1, 0);
 
     // Der eigene Athlet wippt neben der Steuerungshilfe
     this.previewGfx = this.add.graphics();
@@ -121,14 +135,21 @@ export class TitleScene extends Phaser.Scene {
 
   private select(delta: number): void {
     this.selected = (this.selected + delta + ROWS.length) % ROWS.length;
+    // Im Wettkampf gibt es keine Disziplin-Wahl
+    if (this.mode === 'competition' && this.selected === ROW.event) {
+      this.selected = (this.selected + delta + ROWS.length) % ROWS.length;
+    }
     sfx.menu();
     this.refresh();
   }
 
   private change(delta: number): void {
     const wrap = (v: number, n: number) => (v + delta + n) % n;
-    if (this.selected === 0) this.eventIndex = wrap(this.eventIndex, EVENTS.length);
-    else if (this.selected === 1) this.countryIndex = wrap(this.countryIndex, COUNTRIES.length);
+    if (this.selected === ROW.mode) {
+      this.mode = this.mode === 'single' ? 'competition' : 'single';
+      saveMode(this.mode);
+    } else if (this.selected === ROW.event) this.eventIndex = wrap(this.eventIndex, EVENTS.length);
+    else if (this.selected === ROW.nation) this.countryIndex = wrap(this.countryIndex, COUNTRIES.length);
     else this.lookSeed = Math.max(1, this.lookSeed + delta);
     sfx.menu();
     this.refresh();
@@ -139,24 +160,35 @@ export class TitleScene extends Phaser.Scene {
     saveEventIndex(this.eventIndex);
     saveCountryIndex(this.countryIndex);
     saveLookSeed(this.lookSeed);
+    saveMode(this.mode);
+    if (this.mode === 'competition') {
+      const codes = COUNTRIES.map((c) => c.code);
+      setCompetition(createCompetition(COUNTRIES[this.countryIndex].code, codes, Math.random, this.lookSeed));
+      this.scene.start('medals', { mode: 'intro' });
+      return;
+    }
+    endCompetition();
     this.scene.start(EVENTS[this.eventIndex].scene, { countryIndex: this.countryIndex });
   }
 
   private refresh(): void {
     const event = EVENTS[this.eventIndex];
     const country = COUNTRIES[this.countryIndex];
+    const competition = this.mode === 'competition';
     this.look = createLook(country, this.lookSeed, 1);
 
-    this.values[0].setText(event.name);
-    this.values[1].setText(country.name);
-    this.values[2].setText(`TYP ${this.lookSeed}`);
+    this.values[ROW.mode].setText(competition ? 'WETTKAMPF' : 'EINZELDISZIPLIN');
+    this.values[ROW.event].setText(competition ? 'ALLE 4' : event.name);
+    this.values[ROW.nation].setText(country.name);
+    this.values[ROW.look].setText(`TYP ${this.lookSeed}`);
     // Bei der Nation sitzt die Flagge links neben dem Namen
     const flagW = 24;
-    this.values[1].setX(VALUE_X + (flagW + 10) / 2);
+    this.values[ROW.nation].setX(VALUE_X + (flagW + 10) / 2);
     ROWS.forEach((_, i) => {
       const active = i === this.selected;
-      this.labels[i].setColor(active ? '#f7d038' : '#9aa0b8');
-      this.values[i].setColor(active ? '#f7d038' : '#ffffff');
+      const disabled = competition && i === ROW.event;
+      this.labels[i].setColor(disabled ? '#5d6278' : active ? '#f7d038' : '#9aa0b8');
+      this.values[i].setColor(disabled ? '#5d6278' : active ? '#f7d038' : '#ffffff');
     });
 
     const g = this.menuGfx;
@@ -171,16 +203,18 @@ export class TitleScene extends Phaser.Scene {
     g.fillStyle(COLORS.yellow, 1);
     g.fillTriangle(214, rowY + 8, 222, rowY + 2, 222, rowY + 14);
     g.fillTriangle(PANEL.x + PANEL.w - 14, rowY + 8, PANEL.x + PANEL.w - 22, rowY + 2, PANEL.x + PANEL.w - 22, rowY + 14);
-    const nation = this.values[1];
-    drawFlag(g, country.flag, Math.round(nation.x - nation.width / 2 - flagW - 10), ROW_Y[1], flagW, 16);
+    const nation = this.values[ROW.nation];
+    drawFlag(g, country.flag, Math.round(nation.x - nation.width / 2 - flagW - 10), ROW_Y[ROW.nation], flagW, 16);
 
-    const lines: [string, string][] = [...event.controls];
-    lines.push(['PFEIL HOCH/RUNTER', 'MENÜ: ZEILE WÄHLEN']);
-    if (lines.length < 4) lines.push(['M / ESC', 'TON AN/AUS / ZURÜCK ZUM MENÜ']);
+    const lines: [string, string][] = competition ? [...COMPETITION_HELP] : [...event.controls];
+    if (!competition) {
+      lines.push(['PFEIL HOCH/RUNTER', 'MENÜ: ZEILE WÄHLEN']);
+      if (lines.length < 4) lines.push(['M / ESC', 'TON AN/AUS / ZURÜCK ZUM MENÜ']);
+    }
     this.helpKeys.forEach((t, i) => t.setText(lines[i]?.[0] ?? ''));
     this.helpTexts.forEach((t, i) => t.setText(lines[i]?.[1] ?? ''));
 
-    const best = loadBest(event.key);
+    const best = competition ? null : loadBest(event.key);
     this.bestText.setText(best ? `${event.bestLabel}: ${event.format(best.value)} (${best.country})` : '');
   }
 
@@ -195,7 +229,8 @@ export class TitleScene extends Phaser.Scene {
     const x = 58;
     const y = 282;
     drawShadow(g, x, y, 0);
-    if (EVENTS[this.eventIndex].key === 'bmx') {
+    const key = this.mode === 'competition' ? '110h' : EVENTS[this.eventIndex].key;
+    if (key === 'bmx') {
       // Im Stand pedalierend auf dem Rad
       drawBmx(g, x, y, 0, this.look, {
         crank: this.elapsed * 0.4,
@@ -208,7 +243,7 @@ export class TitleScene extends Phaser.Scene {
       });
       return;
     }
-    const vaulting = EVENTS[this.eventIndex].key === 'pole';
+    const vaulting = key === 'pole';
     const pose = vaulting ? carryPole(idlePose(this.elapsed, this.look.seed)) : idlePose(this.elapsed, this.look.seed);
     drawRunner(g, x, y, pose, this.look, { time: this.elapsed });
     if (vaulting) {

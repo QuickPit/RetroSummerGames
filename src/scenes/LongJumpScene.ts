@@ -11,7 +11,8 @@ import {
   laneCenterY,
   skewAt,
 } from '../config';
-import { COUNTRIES, type Country } from '../data/countries';
+import { COUNTRIES, countryByCode, type Country } from '../data/countries';
+import { getCompetition } from '../data/session';
 import { loadLookSeed } from '../data/storage';
 import { drawFlag } from '../gfx/flags';
 import { JumpBoard, type JumpBoardRow } from '../gfx/jumpBoard';
@@ -56,6 +57,7 @@ import {
   type LjEvent,
   type LjState,
 } from '../sim/longjump';
+import { confirmAbort, confirmPending } from './ConfirmScene';
 import type { ResultRow, ResultSceneData } from './ResultScene';
 
 const SIM_DT = 1 / 120;
@@ -163,10 +165,18 @@ export class LongJumpScene extends Phaser.Scene {
     const others = Phaser.Utils.Array.Shuffle(COUNTRIES.filter((_, i) => i !== this.countryIndex));
     const profiles = Phaser.Utils.Array.Shuffle([...LJ_CPU_PROFILES]);
     const country = COUNTRIES[this.countryIndex];
-    this.player = { country, look: createLook(country, loadLookSeed(), 1), jumper: createJumper(0, true), profile: null };
-    const cpus: Entrant[] = profiles.map((profile, i) => ({
-      country: others[i],
-      look: createLook(others[i], Math.floor(Math.random() * 1e9), i + 2),
+    // Im Wettkampf tritt immer dasselbe Feld an
+    const field = getCompetition()?.field;
+    const seed = field?.find((f) => f.isPlayer)?.lookSeed ?? loadLookSeed();
+    this.player = { country, look: createLook(country, seed, 1), jumper: createJumper(0, true), profile: null };
+    const opponents = field
+      ? field
+          .filter((f) => !f.isPlayer)
+          .map((f) => ({ country: countryByCode(f.code), seed: f.lookSeed, profile: LJ_CPU_PROFILES[f.profile ?? 0] }))
+      : profiles.map((profile, i) => ({ country: others[i], seed: Math.floor(Math.random() * 1e9), profile }));
+    const cpus: Entrant[] = opponents.map(({ country: c, seed: s, profile }, i) => ({
+      country: c,
+      look: createLook(c, s, i + 2),
       jumper: createJumper(i + 1, false),
       profile,
     }));
@@ -202,7 +212,8 @@ export class LongJumpScene extends Phaser.Scene {
     const { jumper, round } = this.turn;
     if (jumper.isPlayer) {
       this.waitingForPlayer = true;
-      this.showBoard(`DU BIST DRAN – ${round + 1}. VERSUCH`, 'ENTER: SPRINGEN   ESC: MENÜ');
+      const exit = getCompetition() ? 'ESC: ABBRECHEN' : 'ESC: MENÜ';
+      this.showBoard(`DU BIST DRAN – ${round + 1}. VERSUCH`, `ENTER: SPRINGEN   ${exit}`);
       return;
     }
     const e = this.entrantOf(jumper);
@@ -290,9 +301,12 @@ export class LongJumpScene extends Phaser.Scene {
 
   private onKeyDown(ev: KeyboardEvent): void {
     sfx.unlock();
-    if (ev.repeat) return;
+    if (ev.repeat || confirmPending()) return;
     if (ev.code === 'Escape') {
-      this.scene.start('title');
+      if (getCompetition()) {
+        if (!this.finished) confirmAbort(this, () => this.releaseHeld());
+      }
+      else this.scene.start('title');
       return;
     }
     if (ev.code === 'KeyM') {
@@ -328,10 +342,15 @@ export class LongJumpScene extends Phaser.Scene {
     }
   }
 
-  private onKeyUp(ev: KeyboardEvent): void {
-    if (ev.code !== 'Space' || !this.jump) return;
+  /** Nach der Rückfrage gilt eine gehaltene Leertaste als losgelassen */
+  private releaseHeld(): void {
+    if (!this.jump) return;
     const e = ljRelease(this.jump);
     if (e) this.handleEvent(this.jump, e);
+  }
+
+  private onKeyUp(ev: KeyboardEvent): void {
+    if (ev.code === 'Space') this.releaseHeld();
   }
 
   // ------------------------------------------------------------------ Ablauf

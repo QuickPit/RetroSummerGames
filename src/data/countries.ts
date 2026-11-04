@@ -31,3 +31,7 @@ export const COUNTRIES: readonly Country[] = [
   { code: 'JAM', name: 'JAMAIKA', flag: { kind: 'jamaica' }, jersey: 0xfed100, shorts: 0x009b3a, accent: 0x10101c },
   { code: 'JPN', name: 'JAPAN', flag: { kind: 'circle', bg: 0xffffff, circle: 0xbc002d }, jersey: 0xbc002d, shorts: 0xffffff, accent: 0xffffff },
 ];
+
+export function countryByCode(code: string): Country {
+  return COUNTRIES.find((c) => c.code === code) ?? COUNTRIES[0];
+}

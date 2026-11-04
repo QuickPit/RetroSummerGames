@@ -6,10 +6,23 @@ diesmal per Tastatur.
 
 **Spielen:** https://quickpit.github.io/RetroSummerGames/
 
-## Aktueller Stand (v0.5 – Solo-Prototyp)
+## Aktueller Stand (v0.6 – Einzelspieler)
 
 Vier Disziplinen gegen drei Computer-Gegner (Rookie, Profi, Champion). Im Startbildschirm wählst du
-mit **↑ / ↓** die Zeile (Disziplin, Nation, Athlet) und änderst sie mit **← / →**.
+mit **↑ / ↓** die Zeile (Modus, Disziplin, Nation, Athlet) und änderst sie mit **← / →**.
+
+### Wettkampf „Die Spiele“
+
+Menüzeile **MODUS: WETTKAMPF** – alle vier Disziplinen nacheinander in fester Reihenfolge
+(110 m Hürden, Weitsprung, Stabhochsprung, BMX) gegen dieselben drei Nationen.
+
+- Jede Disziplin gibt es nur **einmal** – „Nochmal“ und R sind im Wettkampf aus (dafür gibt es den Einzelmodus).
+- Nach jeder Siegerehrung zeigt **Enter** den Medaillenspiegel der Nationen (Gold vor Silber vor Bronze;
+  gleiche Medaillen = gleicher Platz) und die Steuerung der nächsten Disziplin.
+- Medaillen gibt es nur für gültige Leistungen auf Platz 1–3 – wer z. B. im Weitsprung nur Fehlversuche hat, geht leer aus, und niemand rückt nach.
+- Am Ende steht der **Endstand** mit Gesamtsieger (bei Gleichstand gewinnen mehrere Nationen gemeinsam).
+- **Esc** fragt nach („WETTKAMPF ABBRECHEN?“) und pausiert solange das Spiel – die Zeit läuft nicht weiter.
+- Der Spielstand wird bewusst nicht gespeichert: Neu laden = neuer Wettkampf. Persönliche Bestleistungen zählen aber auch hier.
 
 ### 110 m Hürden
 
@@ -72,7 +85,7 @@ aus dem Startgatter, gewertet wird **Trickpunkte + Zeitbonus**.
 | --- | --- |
 | Enter | Start bestätigen / weiter / nochmal |
 | M | Ton an/aus |
-| Esc | zurück zum Menü |
+| Esc | zurück zum Menü (im Wettkampf mit Rückfrage) |
 
 - Ergebnis mit Siegerpodest, Medaillen und gespeicherter persönlicher Bestleistung je Disziplin.
 - Liebevoll animierte Athleten: verschiedene Frisuren, 80er-Stirnbänder, Mimik (konzentriert, angestrengt, „Autsch“, Jubel, erschöpft), Wippen vor dem Start, Jubeln oder Verschnaufen im Ziel.
@@ -121,8 +134,8 @@ src/
   sim/        Reine Spiellogik ohne Grafik (Hürden, Stabhochsprung, Weitsprung, BMX, Wettkampf, Gegner) – getestet
   gfx/        Prozedurale Grafik: Athleten, BMX-Rad, Stadion, Strand, Flaggen, HUD
   audio/      Per Web Audio synthetisierte Soundeffekte
-  scenes/     Phaser-Szenen: Titel, Hürdenlauf, Stabhochsprung, Weitsprung, BMX, Ergebnis
-  data/       Disziplinen, Nationen und lokale Speicherung (Bestleistungen, Auswahl)
+  scenes/     Phaser-Szenen: Titel, Hürdenlauf, Stabhochsprung, Weitsprung, BMX, Ergebnis, Medaillenspiegel, Rückfrage
+  data/       Disziplinen, Nationen, lokale Speicherung (Bestleistungen, Auswahl) und Wettkampf-Spielstand (nur im Speicher)
 scripts/e2e/  Automatischer Spieltest (Bot je Disziplin)
 docs/         Roadmap und Design-Spezifikationen
 .claude/      Agenten-Team und /sprint-Ablauf

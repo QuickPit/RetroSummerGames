@@ -3,10 +3,13 @@ import { sfx } from '../audio/sfx';
 import { COLORS, FONT, GAME_WIDTH } from '../config';
 import type { Country } from '../data/countries';
 import { eventByKey, type EventKey } from '../data/events';
+import { getCompetition, setCompetition } from '../data/session';
 import { loadBest, saveBest } from '../data/storage';
 import { drawFlag } from '../gfx/flags';
 import { cheerPose, drawRunner, wavePose, type RunnerLook } from '../gfx/runner';
 import { Stadium } from '../gfx/stadium';
+import { COMPETITION_ORDER, currentEvent, recordEvent } from '../sim/competition';
+import { confirmAbort, confirmPending } from './ConfirmScene';
 
 export interface ResultCell {
   text: string;
@@ -50,6 +53,8 @@ export class ResultScene extends Phaser.Scene {
   private result!: ResultSceneData;
   private podiumGfx!: Phaser.GameObjects.Graphics;
   private elapsed = 0;
+  /** Szenenwechsel ist angestoßen – keine weiteren Tasten */
+  private leaving = false;
 
   constructor() {
     super('result');
@@ -58,11 +63,18 @@ export class ResultScene extends Phaser.Scene {
   init(data: ResultSceneData): void {
     this.result = data;
     this.elapsed = 0;
+    this.leaving = false;
   }
 
   create(): void {
     const { rows, headers } = this.result;
     const event = eventByKey(this.result.event);
+    // Im Wettkampf: Medaillen genau einmal eintragen
+    const competition = getCompetition();
+    if (competition) {
+      setCompetition(recordEvent(competition, event.key, rows.map((r) => ({ code: r.country.code, valid: r.valid }))));
+    }
+    const eventNo = (COMPETITION_ORDER as readonly EventKey[]).indexOf(event.key) + 1;
     const stadium = new Stadium(this);
     stadium.update(1200, 0, 0, 0);
     this.add.rectangle(0, 0, GAME_WIDTH, 360, 0x10101c, 0.78).setOrigin(0);
@@ -72,7 +84,8 @@ export class ResultScene extends Phaser.Scene {
       this.add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, color });
 
     text(GAME_WIDTH / 2, 12, 'ERGEBNIS', 16, '#f7d038').setOrigin(0.5, 0);
-    text(GAME_WIDTH / 2, 34, event.name, 8, '#9aa0b8').setOrigin(0.5, 0);
+    const subtitle = competition ? `${event.name} – DISZIPLIN ${eventNo} VON ${COMPETITION_ORDER.length}` : event.name;
+    text(GAME_WIDTH / 2, 34, subtitle, 8, '#9aa0b8').setOrigin(0.5, 0);
 
     // Podest
     this.podiumGfx = this.add.graphics();
@@ -123,7 +136,8 @@ export class ResultScene extends Phaser.Scene {
 
     this.showPersonalBest(rows, event.key);
 
-    const prompt = text(GAME_WIDTH / 2, 330, 'ENTER: NOCHMAL   ESC: MENÜ', 8, '#f7d038').setOrigin(0.5, 0);
+    const promptText = competition ? 'ENTER: WEITER   ESC: ABBRECHEN' : 'ENTER: NOCHMAL   ESC: MENÜ';
+    const prompt = text(GAME_WIDTH / 2, 330, promptText, 8, '#f7d038').setOrigin(0.5, 0);
     this.tweens.add({ targets: prompt, alpha: 0.4, duration: 500, yoyo: true, repeat: -1 });
 
     const place = rows.findIndex((r) => r.isPlayer) + 1;
@@ -132,14 +146,25 @@ export class ResultScene extends Phaser.Scene {
     sfx.crowd(medal ? 0.7 : 0.25);
 
     const kb = this.input.keyboard!;
+    const createdAt = performance.now();
     const onKey = (ev: KeyboardEvent) => {
       sfx.unlock();
-      if (ev.repeat) return;
+      if (ev.repeat || this.leaving || confirmPending()) return;
+      const state = getCompetition();
+      // Im Wettkampf zählen nur Tasten, die erst in der Siegerehrung gedrückt wurden
+      if (state && ev.timeStamp > 0 && ev.timeStamp < createdAt) return;
       if (ev.code === 'Enter' || ev.code === 'NumpadEnter' || ev.code === 'Space') {
         sfx.confirm();
-        this.scene.start(this.result.replay.scene, this.result.replay.data);
+        this.leaving = true;
+        // Im Wettkampf gibt es kein Nochmal – weiter zum Medaillenspiegel
+        if (state) this.scene.start('medals', { mode: currentEvent(state) === null ? 'final' : 'between' });
+        else this.scene.start(this.result.replay.scene, this.result.replay.data);
       } else if (ev.code === 'Escape') {
-        this.scene.start('title');
+        if (state) confirmAbort(this);
+        else {
+          this.leaving = true;
+          this.scene.start('title');
+        }
       } else if (ev.code === 'KeyM') {
         sfx.toggleMute();
       }

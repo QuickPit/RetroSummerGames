@@ -129,6 +129,13 @@ class Sfx {
     }
   }
 
+  /** Glitzern der neu blinkenden Medaillen im Spiegel; `step` 0..2 steigt in der Tonhöhe */
+  medalShine(step: number): void {
+    const base = [1319, 1568, 1976][Math.max(0, Math.min(2, step))];
+    this.tone(base, 0.05, 'square', 0.05);
+    this.tone(base * 1.5, 0.12, 'triangle', 0.09, undefined, 0.05);
+  }
+
   // ---- Stabhochsprung
 
   /** Stab rammt in den Einstichkasten */

@@ -30,7 +30,7 @@ Der `/sprint`-Ablauf nimmt immer den **obersten offenen** Punkt (`[ ]`), setzt i
   Zählung inkl. Gleichstand); Spielstand überlebt keinen Neustart der Seite (bewusst einfach);
   Spieltest-Bot spielt einen kompletten Wettkampf.
   Aufgeteilt in zwei Sprints:
-  - [ ] **RSG-01a Ablauf und Medaillenspiegel** – Menüzeile MODUS, feste Reihenfolge, Medaillenspiegel
+  - [x] **RSG-01a Ablauf und Medaillenspiegel** (v0.6.0) – Menüzeile MODUS, feste Reihenfolge, Medaillenspiegel
     nach jeder Siegerehrung, Esc mit Rückfrage, schlichter Endstand mit Gesamtsieger, Bot spielt den
     ganzen Wettkampf, Unit-Test der Zählung.
   - [ ] **RSG-01b Große Abschlussfeier** – animierte Feier für den Gesamtsieger (Podest der Nationen,
@@ -83,6 +83,15 @@ Der `/sprint`-Ablauf nimmt immer den **obersten offenen** Punkt (`[ ]`), setzt i
 - [ ] **RSG-11 Gemeinsame Szenen-Bausteine**
   Doppelte Logik (Tastatur-Verwaltung, Fade, Ergebnis-Übergabe, Kamera, Board-Ablauf) in gemeinsame
   Helfer überführen – ohne Verhaltensänderung, Spieltest bleibt grün.
+  Aus dem Review von RSG-01a: Zuordnung Wettkampf-Feld → Gegner steht viermal in den Disziplinszenen
+  (Helfer `competitionOpponents(profiles)`); Esc/Rückfrage-Verdrahtung je Szene vereinheitlichen;
+  Dialog-Bausteine (`drawConfirmBox`, `drawChoiceMarker`, `drawInfoBox`) von `gfx/medalHud.ts` nach
+  `gfx/hud.ts` verschieben (für das Pause-Menü RSG-03). Publikumsgeräusch während der Rückfrage pausieren.
+
+- [ ] **RSG-15 Hilfekasten im Titel**
+  Tasten- und Textspalte stehen fest (x126/x276): „LEERTASTE AM BRETT“ hat nur 6 px Luft, der
+  längste Steuerungstext (33 Zeichen) ragt über den Kasten. Spaltenberechnung wie im NÄCHSTE-Kasten
+  des Medaillenspiegels (`MedalsScene`) übernehmen.
 
 - [ ] **RSG-12 Lesbare Umlaute**
   In „Press Start 2P“ wirken Ä/Ö/Ü wie Kleinbuchstaben. Eigene Großbuchstaben-Umlaute zeichnen
@@ -98,7 +107,8 @@ Der `/sprint`-Ablauf nimmt immer den **obersten offenen** Punkt (`[ ]`), setzt i
 ## Erledigt
 
 - [x] 110 m Hürden (v0.1) · Liebevollere Athleten (v0.2) · Stabhochsprung + Menü (v0.3) ·
-  BMX am Strand (v0.4) · Weitsprung (v0.5) · Agenten-Team und automatischer Spieltest (v0.5.1)
+  BMX am Strand (v0.4) · Weitsprung (v0.5) · Agenten-Team und automatischer Spieltest (v0.5.1) ·
+  Wettkampf mit Medaillenspiegel – RSG-01a (v0.6.0)
 
 ## Offene Fragen an den Owner
 
