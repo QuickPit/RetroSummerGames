@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { createRng } from './cpu';
+import { withForm } from './difficulty';
 import {
   LJ,
   LJ_CPU_PROFILES,
   ROUNDS,
   bestJump,
   cpuJump,
+  jumpCpuProfiles,
+  simulateCpuJump,
   createJump,
   createJumper,
   flightDuration,
@@ -62,8 +65,13 @@ describe('Sprung', () => {
     expect(s.distance!).toBeLessThan(9.2);
   });
 
-  it('springt weiter, je schneller angelaufen wird', () => {
-    expect(jump({ rate: 12 }).distance!).toBeGreaterThan(jump({ rate: 9 }).distance! + 1.5);
+  it('springt weiter, je schneller angelaufen wird – oben flacht die Tempo-Kurve ab', () => {
+    const d6 = jump({ rate: 6 }).distance!;
+    const d9 = jump({ rate: 9 }).distance!;
+    const d12 = jump({ rate: 12 }).distance!;
+    expect(d9).toBeGreaterThan(d6 + 1.5);
+    expect(d12).toBeGreaterThan(d9);
+    expect(d12 - d9).toBeLessThan(d9 - d6);
   });
 
   it('ist ungültig bei Übertreten', () => {
@@ -136,13 +144,38 @@ describe('Wettkampf', () => {
     expect(rankJumpers([a, b])[0]).toBe(b);
   });
 
-  it('Computer-Gegner springen je nach Stärke unterschiedlich weit', () => {
+  it('Computer-Gegner springen je nach Stärke unterschiedlich weit (NORMAL Ø Bestweite 6,9 / 7,6 / 8,4 m)', () => {
+    expect(jumpCpuProfiles('normal')).toEqual(LJ_CPU_PROFILES);
     const rng = createRng(3);
+    let fouls = 0;
     const avg = LJ_CPU_PROFILES.map((p) => {
-      const jumps = Array.from({ length: 200 }, () => cpuJump(p, rng)).filter((d): d is number => d !== null);
-      return jumps.reduce((x, y) => x + y, 0) / jumps.length;
+      // 100 Wettbewerbe mit Tagesform, je 3 Versuche – gewertet wird der beste
+      const bests = Array.from({ length: 100 }, () => {
+        const formed = withForm(p, rng);
+        const all = Array.from({ length: ROUNDS }, () => cpuJump(formed, rng));
+        fouls += all.filter((d) => d === null).length;
+        return Math.max(0, ...all.filter((d): d is number => d !== null));
+      }).filter((d) => d > 0);
+      return bests.reduce((x, y) => x + y, 0) / bests.length;
     });
     expect(avg[0]).toBeLessThan(avg[1]);
     expect(avg[1]).toBeLessThan(avg[2]);
+    expect(avg[0]).toBeGreaterThan(6.6);
+    expect(avg[0]).toBeLessThan(7.2);
+    expect(avg[1]).toBeGreaterThan(7.3);
+    expect(avg[1]).toBeLessThan(7.9);
+    expect(avg[2]).toBeGreaterThan(8.1);
+    expect(avg[2]).toBeLessThan(8.7);
+    // Übertreten entsteht aus dem Timing (1 σ Sicherheitsabstand ≈ 16 %)
+    expect(fouls / 900).toBeGreaterThan(0.08);
+    expect(fouls / 900).toBeLessThan(0.25);
+  });
+
+  it('Computer-Versuche laufen über die echte Sim', () => {
+    const p = LJ_CPU_PROFILES[1];
+    const s = simulateCpuJump(p, createRng(9));
+    expect(s.phase === 'landed' || s.phase === 'runthrough').toBe(true);
+    expect(cpuJump(p, createRng(9))).toBe(s.distance);
+    if (s.distance !== null) expect(s.landing).not.toBeNull();
   });
 });

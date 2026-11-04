@@ -12,6 +12,8 @@ import {
   simulateRace,
   step,
   stroke,
+  strokeGain,
+  swimCpuProfiles,
   toWall,
   type SwimCpuProfile,
   type SwimEvent,
@@ -92,11 +94,11 @@ describe('Armzug', () => {
     const { s, t } = inWater();
     s.v = 1.5;
     stroke(s, 'L', t);
-    expect(s.v).toBeCloseTo(1.5 + SWIM.strokeImpulse);
+    expect(s.v).toBeCloseTo(1.5 + strokeGain(1.5));
     stroke(s, 'R', t + 0.1);
     s.v = 1.5;
     expect(stroke(s, 'L', t + 0.191)).toBe('full');
-    expect(s.v).toBeCloseTo(1.5 + SWIM.strokeImpulse);
+    expect(s.v).toBeCloseTo(1.5 + strokeGain(1.5));
   });
 
   it('wirkt zwischen 0,13 und 0,19 s anteilig', () => {
@@ -106,7 +108,7 @@ describe('Armzug', () => {
     s.v = 1.5;
     expect(stroke(s, 'L', t + 0.16)).toBe('hasty');
     // Mitte der Zone: Faktor (1 + 0,35) / 2
-    expect(s.v - 1.5).toBeCloseTo(SWIM.strokeImpulse * (1 + SWIM.hastyFactor) / 2, 5);
+    expect(s.v - 1.5).toBeCloseTo(strokeGain(1.5, (1 + SWIM.hastyFactor) / 2), 5);
     expect(s.inTakt).toBe(2);
   });
 
@@ -209,7 +211,7 @@ describe('Luft', () => {
     s.v = 2;
     stroke(s, 'L', t);
     expect(s.gasps).toBe(1);
-    expect(s.v).toBeCloseTo((2 + SWIM.strokeImpulse) * SWIM.gaspSpeedFactor);
+    expect(s.v).toBeCloseTo((2 + strokeGain(2)) * SWIM.gaspSpeedFactor);
     expect(s.air).toBe(1);
     expect(s.stun).toBeCloseTo(SWIM.gaspStun);
     expect(stroke(s, 'R', t + 0.3)).toBeNull();
@@ -303,15 +305,25 @@ describe('Ziel', () => {
   });
 });
 
+describe('Tempo-Kurve', () => {
+  it('sättigt den Zuwachs je Zug zum Höchsttempo hin', () => {
+    expect(strokeGain(0)).toBeCloseTo(SWIM.strokeImpulse, 9);
+    expect(strokeGain(SWIM.maxSpeed)).toBeCloseTo(SWIM.strokeImpulse * (1 - 1 / SWIM.strokeSaturation), 9);
+    expect(strokeGain(2)).toBeLessThan(strokeGain(1));
+    expect(strokeGain(SWIM.strokeSaturation * SWIM.maxSpeed + 1)).toBe(0);
+  });
+});
+
 describe('Computer-Gegner und Balancing', () => {
-  it('sind streng geordnet und schwimmen realistische Zeiten (je 40 Läufe)', () => {
+  it('sind streng geordnet und schwimmen realistische Zeiten (NORMAL Ø 52,3 / 50,1 / 48,4, je 40 Läufe)', () => {
+    expect(swimCpuProfiles('normal')).toEqual(SWIM_CPU_PROFILES);
     const [rookie, profi, champion] = SWIM_CPU_PROFILES.map((p) => average(p, 40, 100));
-    expect(rookie.avg).toBeGreaterThan(53);
-    expect(rookie.avg).toBeLessThan(56);
-    expect(profi.avg).toBeGreaterThan(49.5);
+    expect(rookie.avg).toBeGreaterThan(51);
+    expect(rookie.avg).toBeLessThan(54);
+    expect(profi.avg).toBeGreaterThan(49);
     expect(profi.avg).toBeLessThan(51.5);
-    expect(champion.avg).toBeGreaterThan(47);
-    expect(champion.avg).toBeLessThan(48.7);
+    expect(champion.avg).toBeGreaterThan(47.5);
+    expect(champion.avg).toBeLessThan(49.5);
     expect(rookie.avg).toBeGreaterThan(profi.avg);
     expect(profi.avg).toBeGreaterThan(champion.avg);
     expect(champion.avg).toBeGreaterThan(SWIM.worldRecord);
@@ -322,6 +334,14 @@ describe('Computer-Gegner und Balancing', () => {
     const calm = average(model(10, 0.12), 40, 7);
     const hammer = average(model(13, 0.12), 40, 7);
     expect(calm.avg).toBeLessThan(hammer.avg - 3);
+  });
+
+  it('auch 12/s ist langsamer als 10/s – Hämmern lohnt nicht', () => {
+    const calm = average(model(10, 0.2), 40, 8);
+    const fast = average(model(12, 0.2), 40, 8);
+    expect(calm.avg).toBeLessThan(fast.avg);
+    expect(fast.min).toBeGreaterThan(30);
+    expect(fast.max).toBeLessThan(90);
   });
 
   it('dauert auch für langsame und hämmernde Spieler 46–90 s', () => {
@@ -472,7 +492,7 @@ describe('Fixrunde nach Review', () => {
     expect(stroke(s, 'R', now + 0.06)).toBe('hasty');
     const short = s.v - 1;
     expect(short).toBeGreaterThan(0);
-    expect(short).toBeCloseTo((SWIM.strokeImpulse * SWIM.hastyFactor * 0.12) / SWIM.chokeCycle, 5);
+    expect(short).toBeCloseTo(strokeGain(1, (SWIM.hastyFactor * 0.12) / SWIM.chokeCycle), 5);
   });
 
   it('bleibt auch beim Hämmern ohne Atmen unter 90 s', () => {

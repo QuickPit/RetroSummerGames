@@ -3,9 +3,11 @@ import { createRng } from './cpu';
 import {
   DIVE,
   DIVES,
+  DIVE_CPU_DIVES,
   DIVE_CPU_PROFILES,
   DIVE_TIPS,
   cpuDiveRate,
+  diveCpuProfiles,
   createDive,
   createDiver,
   diveById,
@@ -109,7 +111,9 @@ describe('Schwung am Turm', () => {
     expect(s.phase).toBe('swing');
     expect(swingTap(s, 'L')).toBe(false);
     expect(swingTap(s, 'R')).toBe(true);
-    expect(s.raw).toBeCloseTo(2 * DIVE.swingImpulse, 6);
+    // Gesättigt: der zweite Tipp bringt etwas weniger als der erste
+    const a = DIVE.swingImpulse;
+    expect(s.raw).toBeCloseTo(a + a * (1 - a / DIVE.swingSaturation), 6);
   });
 
   it('ignoriert Tipps beim Gang an die Kante', () => {
@@ -118,15 +122,17 @@ describe('Schwung am Turm', () => {
     expect(s.phase).toBe('walk');
   });
 
-  it('ergibt mit 8/s einen Schwung von 0,68–0,74 und mit 11/s mindestens 0,95', () => {
+  it('ergibt mit 8/s einen Schwung von 0,88–0,95 und mit 11/s mindestens 0,99', () => {
     const at = (rate: number) => {
       const s = toReady(diveById('25h'));
       tapUntil(s, rate, s.time + 3);
       return s.swing;
     };
-    expect(at(8)).toBeGreaterThanOrEqual(0.68);
-    expect(at(8)).toBeLessThanOrEqual(0.74);
-    expect(at(11)).toBeGreaterThanOrEqual(0.95);
+    expect(at(6)).toBeGreaterThanOrEqual(0.78);
+    expect(at(6)).toBeLessThanOrEqual(0.86);
+    expect(at(8)).toBeGreaterThanOrEqual(0.88);
+    expect(at(8)).toBeLessThanOrEqual(0.95);
+    expect(at(11)).toBeGreaterThanOrEqual(0.99);
     expect(at(14)).toBe(1);
   });
 
@@ -360,7 +366,8 @@ describe('Eintauchen', () => {
     const early = jumpOff(diveById('25h'), { offset: -0.15 });
     fly(early, releaseFor(early));
     expect(judge(early).tip).toBe('takeoffEarly');
-    const slow = jumpOff(diveById('15h'), { rate: 8 });
+    // Mit der Tempo-Kurve hat erst 6/s zu wenig Schwung (8/s ≈ 92 %)
+    const slow = jumpOff(diveById('15h'), { rate: 6 });
     fly(slow, releaseFor(slow));
     expect(judge(slow).tip).toBe('moreHeight');
   });
@@ -551,8 +558,8 @@ function series(p: DiveCpuProfile, rng: () => number, rate: number) {
 
 const avg = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
 
-/** Spieler-Modell gegen das Feld Rookie + Profi + Champion */
-function versusField(p: DiveCpuProfile, n: number, seed: number) {
+/** Spieler-Modell gegen das Feld Rookie + Profi + Champion (Standard: NORMAL) */
+function versusField(p: DiveCpuProfile, n: number, seed: number, opponents: readonly DiveCpuProfile[] = DIVE_CPU_PROFILES) {
   const rng = createRng(seed);
   const totals: number[] = [];
   let medal = 0;
@@ -560,7 +567,7 @@ function versusField(p: DiveCpuProfile, n: number, seed: number) {
   let wr = 0;
   for (let i = 0; i < n; i++) {
     const own = series(p, rng, p.tapRate).total;
-    const field = DIVE_CPU_PROFILES.map((c) => series(c, rng, cpuDiveRate(c, rng)).total);
+    const field = opponents.map((c) => series(c, rng, cpuDiveRate(c, rng)).total);
     const better = field.filter((f) => f > own).length;
     totals.push(own);
     if (better < 3) medal++;
@@ -580,28 +587,32 @@ const player = (tapRate: number, tapJitter: number, to: number, re: number, dive
 });
 
 describe('Balancing', () => {
-  it('Computer-Gegner: je 40 Serien Ø Rookie 140–165, Profi 205–232, Champion 238–262 unter dem Weltrekord', () => {
+  it('Computer-Gegner NORMAL: je 40 Serien Ø Rookie 160–190, Profi 188–215, Champion 212–242 unter dem Weltrekord', () => {
+    expect(diveCpuProfiles('normal')).toEqual(DIVE_CPU_PROFILES);
+    expect(DIVE_CPU_PROFILES.map((p) => p.dives)).toEqual(DIVE_CPU_DIVES.normal);
     const rng = createRng(7);
     const means = DIVE_CPU_PROFILES.map((p) =>
       avg(Array.from({ length: 40 }, () => series(p, rng, cpuDiveRate(p, rng)).total)),
     );
-    expect(means[0]).toBeGreaterThanOrEqual(140);
-    expect(means[0]).toBeLessThanOrEqual(165);
-    expect(means[1]).toBeGreaterThanOrEqual(205);
-    expect(means[1]).toBeLessThanOrEqual(232);
-    expect(means[2]).toBeGreaterThanOrEqual(238);
-    expect(means[2]).toBeLessThanOrEqual(262);
+    expect(means[0]).toBeGreaterThanOrEqual(160);
+    expect(means[0]).toBeLessThanOrEqual(190);
+    expect(means[1]).toBeGreaterThanOrEqual(188);
+    expect(means[1]).toBeLessThanOrEqual(215);
+    expect(means[2]).toBeGreaterThanOrEqual(212);
+    expect(means[2]).toBeLessThanOrEqual(242);
     expect(means[0]).toBeLessThan(means[1]);
     expect(means[1]).toBeLessThan(means[2]);
     expect(means[2]).toBeLessThan(DIVE.worldRecord);
   });
 
-  it('Computer-Gegner springen kaum Fehlsprünge', () => {
+  it('Computer-Gegner springen kaum Fehlsprünge – der Rookie wagt den 3½-Salto', () => {
     const rng = createRng(8);
-    for (const p of DIVE_CPU_PROFILES) {
+    // Rookie NORMAL (7/s, Fehler 1,2) springt laut Spec 25p, 15s2, 35h: höherer Erwartungswert, mehr Risiko
+    const limits = [0.6, 0.3, 0.3];
+    DIVE_CPU_PROFILES.forEach((p, i) => {
       const fails = Array.from({ length: 40 }, () => series(p, rng, cpuDiveRate(p, rng)).fails);
-      expect(avg(fails)).toBeLessThan(0.3);
-    }
+      expect(avg(fails)).toBeLessThan(limits[i]);
+    });
   });
 
   it('8 Tipps/s (σ 80/60 ms) mit 15p, 25h, 15s2 erreicht Ø ≥ 140 und oft eine Medaille', () => {
@@ -612,9 +623,16 @@ describe('Balancing', () => {
     expect(r.gold).toBeLessThan(0.05);
   });
 
-  it('8 Tipps/s: zu schwer gewählt kostet Punkte', () => {
-    const fit = versusField(player(8, 0.2, 0.08, 0.06, ['15p', '25h', '15s2']), 80, 12).avg;
-    const hard = versusField(player(8, 0.2, 0.08, 0.06, ['15s2', '35h', '45h']), 80, 12).avg;
+  it('8 Tipps/s mit 15s2, 35h, 25p: Ø ≥ 180, meist eine Medaille, Gold selten', () => {
+    const r = versusField(player(8, 0.2, 0.08, 0.06, ['15s2', '35h', '25p']), 150, 11);
+    expect(r.avg).toBeGreaterThanOrEqual(180);
+    expect(r.medal).toBeGreaterThan(0.65);
+    expect(r.gold).toBeLessThan(0.3);
+  });
+
+  it('8 Tipps/s: zu schwer gewählt (45h) kostet Punkte', () => {
+    const fit = versusField(player(8, 0.2, 0.08, 0.06, ['15s2', '35h', '25p']), 80, 12).avg;
+    const hard = versusField(player(8, 0.2, 0.08, 0.06, ['45h', '35h', '25p']), 80, 12).avg;
     expect(hard).toBeLessThan(fit - 25);
   });
 
@@ -625,13 +643,17 @@ describe('Balancing', () => {
     expect(r.medal).toBeLessThan(0.15);
   });
 
-  it('11 Tipps/s (σ 45/35 ms) mit 15s2, 35h, 45h ist auf Augenhöhe mit dem Champion', () => {
+  it('11 Tipps/s (σ 45/35 ms) mit 15s2, 35h, 45h schlägt NORMAL meist und ist auf Augenhöhe mit SCHWER', () => {
     const r = versusField(player(11, 0.12, 0.045, 0.035, ['15s2', '35h', '45h']), 150, 14);
-    expect(r.avg).toBeGreaterThan(230);
-    expect(r.avg).toBeLessThan(260);
-    expect(r.gold).toBeGreaterThan(0.3);
-    expect(r.gold).toBeLessThan(0.6);
+    expect(r.avg).toBeGreaterThan(235);
+    expect(r.avg).toBeLessThan(265);
+    expect(r.gold).toBeGreaterThan(0.55);
+    expect(r.gold).toBeLessThan(0.9);
     expect(r.wr).toBeLessThan(0.05);
+    const hard = versusField(player(11, 0.12, 0.045, 0.035, ['15s2', '35h', '45h']), 150, 14, diveCpuProfiles('hard'));
+    expect(hard.gold).toBeGreaterThan(0.1);
+    expect(hard.gold).toBeLessThan(0.45);
+    expect(hard.medal).toBeGreaterThan(0.6);
   });
 
   it('14 Tipps/s hämmern bringt kaum mehr als 11/s, schadet aber nicht', () => {
@@ -712,11 +734,12 @@ describe('Fairness (QA)', () => {
 
   it('gleiche Eingaben ergeben bei jeder Bildrate dieselben Noten', () => {
     const cases: [DiveId, number, Input[]][] = [
-      ['25h', 0.93, []],
-      ['35h', 1.3, []],
+      // Öffnen 15° vor dem Ziel bei Kraft 0,98 (10,5/s mit der Tempo-Kurve)
+      ['25h', 0.86, []],
+      ['35h', 1.21, []],
       [
         '15s2',
-        1.06,
+        0.99,
         [
           { t: 0.15, run: (s, at) => void twist(s, at) },
           { t: 0.65, run: (s, at) => void twist(s, at) },
@@ -746,8 +769,8 @@ describe('Fairness (QA)', () => {
         expect(swingTap(s, i % 2 ? 'R' : 'L', at)).toBe(false);
       },
     }));
-    const a = playFrames(def, plan(0.93), () => 1 / 60);
-    const b = playFrames(def, plan(0.93, airTaps), () => 1 / 60);
+    const a = playFrames(def, plan(0.86), () => 1 / 60);
+    const b = playFrames(def, plan(0.86, airTaps), () => 1 / 60);
     expect(b.power).toBe(a.power);
     expect(judge(b)).toEqual(judge(a));
   });

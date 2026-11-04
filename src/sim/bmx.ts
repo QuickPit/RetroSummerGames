@@ -1,14 +1,16 @@
 // Reine Spiellogik für das BMX-Rennen: Strecke, Fahrphysik, Tricks und
 // Wertung (Trickpunkte + Zeitbonus). Ohne Phaser, damit sie testbar ist.
 
-import type { Side } from './hurdles';
+import { cpuField, type CpuSkill, type Difficulty } from './difficulty';
+import { tapSpeed, type Side } from './hurdles';
 
 export const BMX = {
   gravity: 9.81,
-  /** Tempo pro gültigem Tritt; Gleichgewicht ≈ Tipprate × tapImpulse / drag */
-  tapImpulse: 0.8,
+  /** Tempo-Kurve wie beim Laufen: Zuwachs je Tritt = tapGain · vmax · (1 − v / (tapSaturation · vmax)) */
+  tapGain: 0.225,
+  tapSaturation: 1.29,
   drag: 0.8,
-  maxSpeed: 12,
+  maxSpeed: 10.5,
   /** Hangabtrieb, abgeschwächt – sonst verliert man an jeder Rampe zu viel Tempo */
   slopeGravity: 0.55,
   hopSpeed: 3.8,
@@ -219,7 +221,7 @@ export function pedal(s: RiderState, side: Side): boolean {
   if (side === s.lastSide || (s.phase !== 'ground' && s.phase !== 'air')) return false;
   s.lastSide = side;
   if (s.phase !== 'ground') return false;
-  s.vx = Math.min(s.vx + BMX.tapImpulse, BMX.maxSpeed);
+  s.vx = tapSpeed(s.vx, BMX.maxSpeed, 1, BMX.tapGain, BMX.tapSaturation);
   return true;
 }
 
@@ -441,11 +443,27 @@ export interface BmxCpuProfile {
   mistakeChance: number;
 }
 
-export const BMX_CPU_PROFILES: readonly BmxCpuProfile[] = [
-  { name: 'Rookie', tapRate: 8.5, error: 0.12, flipChance: 0, trickChance: 0.35, mistakeChance: 0.2 },
-  { name: 'Profi', tapRate: 9.8, error: 0.08, flipChance: 0.3, trickChance: 0.6, mistakeChance: 0.12 },
-  { name: 'Champion', tapRate: 11, error: 0.05, flipChance: 0.75, trickChance: 0.85, mistakeChance: 0.07 },
-];
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/** BMX-Profil aus Tipprate und Fehlerfaktor */
+export function bmxCpuProfile({ rate, error: e }: CpuSkill, name: string): BmxCpuProfile {
+  return {
+    name,
+    tapRate: rate,
+    error: 0.08 * e,
+    flipChance: clamp(0.9 - 0.9 * (e - 0.33), 0, 0.9),
+    trickChance: clamp(0.9 - 0.45 * (e - 0.33), 0.2, 0.9),
+    mistakeChance: clamp(0.12 * e, 0.02, 0.4),
+  };
+}
+
+/** Die drei Gegner einer Stufe (Rookie/Profi/Champion) */
+export function bmxCpuProfiles(d: Difficulty): BmxCpuProfile[] {
+  return cpuField(d, bmxCpuProfile);
+}
+
+// Reihenfolge Rookie/Profi/Champion – wird in competition.test.ts geprüft!
+export const BMX_CPU_PROFILES: readonly BmxCpuProfile[] = bmxCpuProfiles('normal');
 
 /** Steuert einen Computerfahrer über dieselben Eingaben wie ein Mensch. */
 export class BmxCpu {
@@ -457,12 +475,15 @@ export class BmxCpu {
   private hopFor: number | null = null;
   private blunder = false;
   private jitter = 0;
+  private readonly rate: number;
 
   constructor(
     readonly rider: RiderState,
     readonly profile: BmxCpuProfile,
     private readonly rng: () => number,
   ) {
+    // Jede Fahrt ist etwas anders – auch Computer haben gute und schlechte Tage
+    this.rate = profile.tapRate * (0.95 + 0.1 * rng());
     this.nextTap = 0.15 + rng() * 0.15;
   }
 
@@ -472,7 +493,7 @@ export class BmxCpu {
       while (time >= this.nextTap) {
         pedal(s, this.side);
         this.side = this.side === 'L' ? 'R' : 'L';
-        this.nextTap += (1 + (this.rng() - 0.5) * 0.3) / this.profile.tapRate;
+        this.nextTap += (1 + (this.rng() - 0.5) * 0.3) / this.rate;
       }
       this.plan = 'none';
       s.rotInput = 0;

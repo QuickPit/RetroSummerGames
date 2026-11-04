@@ -4,6 +4,7 @@ import {
   BMX,
   BMX_CPU_PROFILES,
   BmxCpu,
+  bmxCpuProfiles,
   COURSE,
   createRider,
   groundHeight,
@@ -56,11 +57,14 @@ describe('Fahren', () => {
     startRider(s);
     expect(pedal(s, 'L')).toBe(true);
     expect(pedal(s, 'L')).toBe(false);
-    expect(s.vx).toBeCloseTo(BMX.tapImpulse);
+    expect(s.vx).toBeCloseTo(BMX.tapGain * BMX.maxSpeed);
+    // Gesättigt: der zweite Tritt bringt weniger
+    pedal(s, 'R');
+    expect(s.vx).toBeLessThan(2 * BMX.tapGain * BMX.maxSpeed);
   });
 
-  it('kommt mit gutem Tempo sturzfrei ins Ziel', () => {
-    const { s, events } = ride(10);
+  it('kommt mit gutem Tempo (8/s) sturzfrei ins Ziel', () => {
+    const { s, events } = ride(8);
     expect(s.phase).toBe('finished');
     expect(s.crashes).toBe(0);
     expect(events.some((e) => e.type === 'takeoff')).toBe(true);
@@ -146,6 +150,7 @@ describe('Tricks', () => {
 
 describe('Computerfahrer', () => {
   it('fahren je nach Stärke unterschiedlich gut', () => {
+    expect(bmxCpuProfiles('normal')).toEqual(BMX_CPU_PROFILES);
     const scores = BMX_CPU_PROFILES.map((p) => {
       let total = 0;
       for (let seed = 1; seed <= 12; seed++) {
@@ -162,7 +167,8 @@ describe('Computerfahrer', () => {
       }
       return total / 12;
     });
-    expect(scores[2]).toBeGreaterThan(scores[0]);
+    expect(scores[2]).toBeGreaterThan(scores[1]);
+    expect(scores[1]).toBeGreaterThan(scores[0]);
     expect(scores[0]).toBeGreaterThan(500);
   });
 });

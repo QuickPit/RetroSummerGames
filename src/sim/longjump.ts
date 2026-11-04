@@ -1,12 +1,15 @@
 // Reine Spiellogik für den Weitsprung: Anlauf, Absprung am Brett mit
 // Winkelwahl, Flug, Landung – und der Wettkampf über drei Durchgänge.
 
-import { PHYSICS, strideLength, type Side } from './hurdles';
+import { gaussian } from './cpu';
+import { cpuField, cpuJitter, type CpuSkill, type Difficulty } from './difficulty';
+import { PHYSICS, strideLength, tapSpeed, type Side } from './hurdles';
 
 export const LJ = {
   /** Anlauflänge in Metern bis zur Vorderkante des Bretts (x = 0) */
   runup: 32,
-  maxSpeed: 11.2,
+  /** Mit der Tempo-Kurve aus hurdles.ts: Weltrekord 8,95 m braucht ~10/s und nahezu perfektes Timing */
+  maxSpeed: 10.8,
   /** Winkel beim Drücken der Leertaste; steigt, solange sie gehalten wird */
   angleStart: 8,
   angleRate: 70,
@@ -87,7 +90,7 @@ export function ljTap(s: LjState, side: Side): boolean {
   if ((s.phase !== 'ready' && s.phase !== 'runup') || side === s.lastSide) return false;
   s.lastSide = side;
   s.phase = 'runup';
-  s.v = Math.min(s.v + PHYSICS.tapImpulse, LJ.maxSpeed);
+  s.v = tapSpeed(s.v, LJ.maxSpeed);
   return true;
 }
 
@@ -189,23 +192,72 @@ export const ROUNDS = 3;
 
 export interface JumpCpuProfile {
   name: string;
-  mean: number;
-  sigma: number;
-  foulChance: number;
+  /** Gültige Tipps pro Sekunde */
+  tapRate: number;
+  /** Relative Schwankung des Tipp-Abstands (gleichverteilt ±) */
+  tapJitter: number;
+  /** σ des Absprungs in Sekunden – gezielt wird 1 σ vor die Brettkante */
+  boardError: number;
+  /** σ des Absprungwinkels in Grad (Ziel 30°) */
+  angleError: number;
+  /** σ des Beinestreckens in Sekunden (Ziel 0,15 s vor der Landung) */
+  extendError: number;
 }
 
-export const LJ_CPU_PROFILES: readonly JumpCpuProfile[] = [
-  { name: 'Rookie', mean: 5.9, sigma: 0.35, foulChance: 0.25 },
-  { name: 'Profi', mean: 7.2, sigma: 0.3, foulChance: 0.18 },
-  { name: 'Champion', mean: 8.0, sigma: 0.25, foulChance: 0.12 },
-];
+/** Weitsprung-Profil aus Tipprate und Fehlerfaktor */
+export function jumpCpuProfile({ rate, error }: CpuSkill, name: string): JumpCpuProfile {
+  return {
+    name,
+    tapRate: rate,
+    tapJitter: cpuJitter(error),
+    boardError: 0.04 * error,
+    angleError: 4 * error,
+    extendError: 0.06 * error,
+  };
+}
 
-/** Ein Computer-Versuch: Weite oder null bei Übertreten */
+/** Die drei Gegner einer Stufe (Rookie/Profi/Champion) */
+export function jumpCpuProfiles(d: Difficulty): JumpCpuProfile[] {
+  return cpuField(d, jumpCpuProfile);
+}
+
+// Reihenfolge Rookie/Profi/Champion – wird in competition.test.ts geprüft!
+export const LJ_CPU_PROFILES: readonly JumpCpuProfile[] = jumpCpuProfiles('normal');
+
+/** Ein Computer-Versuch über dieselben Eingaben wie ein Mensch: anlaufen, abspringen, Winkel, Beine. */
+export function simulateCpuJump(p: JumpCpuProfile, rng: () => number): LjState {
+  const s = createJump();
+  const dt = 1 / 120;
+  // Sicherheitsabstand zum Brett als Zeit; negativ = übertreten
+  const margin = p.boardError + gaussian(rng) * p.boardError;
+  const angle = 30 + gaussian(rng) * p.angleError;
+  const extend = 0.15 + gaussian(rng) * p.extendError;
+  let t = 0;
+  let nextTap = 0;
+  let side: Side = 'L';
+  while (s.phase !== 'landed' && s.phase !== 'runthrough' && t < 20) {
+    t += dt;
+    while ((s.phase === 'ready' || s.phase === 'runup') && t >= nextTap) {
+      ljTap(s, side);
+      side = side === 'L' ? 'R' : 'L';
+      nextTap += (1 + p.tapJitter * (2 * rng() - 1)) / p.tapRate;
+    }
+    if (s.phase === 'runup' && s.x >= -s.v * margin) {
+      // Wie im Spiel: den Moment des Drückens zurückrechnen
+      ljPress(s, (s.x + s.v * margin) / Math.max(1, s.v));
+    }
+    if (s.phase === 'takeoff' && s.angle >= angle) ljRelease(s);
+    if (extend >= 0 && s.phase === 'flight' && s.extendAt === null && flightDuration(s) - s.flightTime <= extend) {
+      ljPress(s);
+    }
+    stepJump(s, dt);
+  }
+  return s;
+}
+
+/** Ein Computer-Versuch: Weite oder null bei Übertreten – mit derselben Sim gerechnet wie der Spieler */
 export function cpuJump(p: JumpCpuProfile, rng: () => number): number | null {
-  if (rng() < p.foulChance) return null;
-  const u = Math.max(rng(), 1e-9);
-  const n = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rng());
-  return Math.floor(Math.max(4, p.mean + n * p.sigma) * 100) / 100;
+  return simulateCpuJump(p, rng).distance;
 }
 
 export interface Jumper {
