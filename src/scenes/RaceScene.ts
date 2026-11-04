@@ -14,7 +14,8 @@ import {
   laneCenterY,
   skewAt,
 } from '../config';
-import { COUNTRIES, type Country } from '../data/countries';
+import { COUNTRIES, countryByCode, type Country } from '../data/countries';
+import { getCompetition } from '../data/session';
 import { loadLookSeed } from '../data/storage';
 import { Hud } from '../gfx/hud';
 import {
@@ -51,6 +52,7 @@ import {
   type RunnerState,
   type Side,
 } from '../sim/hurdles';
+import { confirmAbort } from './ConfirmScene';
 import type { ResultRow, ResultSceneData } from './ResultScene';
 
 const SIM_DT = 1 / 120;
@@ -150,17 +152,21 @@ export class RaceScene extends Phaser.Scene {
     const others = COUNTRIES.filter((_, i) => i !== this.countryIndex);
     Phaser.Utils.Array.Shuffle(others);
     const profiles = Phaser.Utils.Array.Shuffle([...CPU_PROFILES]);
+    // Im Wettkampf tritt immer dasselbe Feld an
+    const field = getCompetition()?.field;
+    const cpuField = field?.filter((f) => !f.isPlayer);
     let cpuIndex = 0;
 
     for (let lane = 0; lane < LANE_COUNT; lane++) {
       const isPlayer = lane === PLAYER_LANE;
-      const country = isPlayer ? COUNTRIES[this.countryIndex] : others[cpuIndex];
+      const entry = isPlayer ? field?.find((f) => f.isPlayer) : cpuField?.[cpuIndex];
+      const country = isPlayer ? COUNTRIES[this.countryIndex] : entry ? countryByCode(entry.code) : others[cpuIndex];
       const state = createRunner();
-      const seed = isPlayer ? loadLookSeed() : Math.floor(Math.random() * 1e9);
+      const seed = entry ? entry.lookSeed : isPlayer ? loadLookSeed() : Math.floor(Math.random() * 1e9);
       const look: RunnerLook = createLook(country, seed, lane + 1);
-      const cpu = isPlayer
-        ? null
-        : new CpuController(state, profiles[cpuIndex++ % profiles.length], Math.random);
+      const profile = entry?.profile != null ? CPU_PROFILES[entry.profile] : profiles[cpuIndex % profiles.length];
+      const cpu = isPlayer ? null : new CpuController(state, profile, Math.random);
+      if (!isPlayer) cpuIndex++;
       const c: Competitor = {
         country,
         look,
@@ -190,10 +196,13 @@ export class RaceScene extends Phaser.Scene {
 
   private onKeyDown(ev: KeyboardEvent): void {
     sfx.unlock();
-    if (ev.repeat) return;
+    if (ev.repeat || this.scene.isPaused()) return;
+    const competition = getCompetition() !== null;
 
     if (ev.code === 'Escape') {
-      this.scene.start('title');
+      // Im Wettkampf mit Rückfrage; die Rennzeit läuft währenddessen nicht weiter
+      if (competition) confirmAbort(this, (ms) => (this.gunAt += ms));
+      else this.scene.start('title');
       return;
     }
     if (ev.code === 'KeyM') {
@@ -220,7 +229,7 @@ export class RaceScene extends Phaser.Scene {
           return;
         }
         if (ev.code === 'KeyR') {
-          this.scene.restart({ countryIndex: this.countryIndex });
+          if (!competition) this.scene.restart({ countryIndex: this.countryIndex });
           return;
         }
         const t = this.raceTimeAt(ev.timeStamp);

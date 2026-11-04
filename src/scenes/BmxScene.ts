@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { sfx } from '../audio/sfx';
 import { COLORS, FONT, GAME_WIDTH, PX_PER_M, skewAt } from '../config';
-import { COUNTRIES, type Country } from '../data/countries';
+import { COUNTRIES, countryByCode, type Country } from '../data/countries';
+import { getCompetition } from '../data/session';
 import { loadLookSeed } from '../data/storage';
 import { Beach } from '../gfx/beach';
 import { drawBmx, drawCrash, type RiderStance } from '../gfx/bike';
@@ -24,6 +25,7 @@ import {
   type RiderState,
 } from '../sim/bmx';
 import type { Side } from '../sim/hurdles';
+import { confirmAbort } from './ConfirmScene';
 import type { ResultRow, ResultSceneData } from './ResultScene';
 
 const SIM_DT = 1 / 120;
@@ -165,13 +167,20 @@ export class BmxScene extends Phaser.Scene {
   private setupRiders(): void {
     const others = Phaser.Utils.Array.Shuffle(COUNTRIES.filter((_, i) => i !== this.countryIndex));
     const profiles = Phaser.Utils.Array.Shuffle([...BMX_CPU_PROFILES]);
+    // Im Wettkampf tritt immer dasselbe Feld an
+    const field = getCompetition()?.field;
+    const cpuField = field?.filter((f) => !f.isPlayer);
     let cpuIndex = 0;
     for (let lane = 0; lane < LANES; lane++) {
       const isPlayer = lane === PLAYER_LANE;
-      const country = isPlayer ? COUNTRIES[this.countryIndex] : others[cpuIndex];
-      const look = createLook(country, isPlayer ? loadLookSeed() : Math.floor(Math.random() * 1e9), lane + 1);
+      const entry = isPlayer ? field?.find((f) => f.isPlayer) : cpuField?.[cpuIndex];
+      const country = isPlayer ? COUNTRIES[this.countryIndex] : entry ? countryByCode(entry.code) : others[cpuIndex];
+      const seed = entry ? entry.lookSeed : isPlayer ? loadLookSeed() : Math.floor(Math.random() * 1e9);
+      const look = createLook(country, seed, lane + 1);
       const state = createRider();
-      const cpu = isPlayer ? null : new BmxCpu(state, profiles[cpuIndex++], Math.random);
+      const profile = entry?.profile != null ? BMX_CPU_PROFILES[entry.profile] : profiles[cpuIndex];
+      const cpu = isPlayer ? null : new BmxCpu(state, profile, Math.random);
+      if (!isPlayer) cpuIndex++;
       const rider: Rider = {
         country,
         look,
@@ -204,10 +213,13 @@ export class BmxScene extends Phaser.Scene {
     if (side === 'L') this.held.left = true;
     if (side === 'R') this.held.right = true;
     if (ev.code === 'Space') this.held.trick = true;
-    if (ev.repeat) return;
+    if (ev.repeat || this.scene.isPaused()) return;
+    const competition = getCompetition() !== null;
 
     if (ev.code === 'Escape') {
-      this.scene.start('title');
+      // Gehaltene Tasten gelten nach der Rückfrage als losgelassen
+      if (competition) confirmAbort(this, () => (this.held = { left: false, right: false, trick: false }));
+      else this.scene.start('title');
       return;
     }
     if (ev.code === 'KeyM') {
@@ -225,7 +237,7 @@ export class BmxScene extends Phaser.Scene {
       return;
     }
     if (ev.code === 'KeyR') {
-      this.scene.restart({ countryIndex: this.countryIndex });
+      if (!competition) this.scene.restart({ countryIndex: this.countryIndex });
       return;
     }
     const s = this.player.state;

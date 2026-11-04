@@ -66,3 +66,14 @@ export function loadEventIndex(): number {
 export function saveEventIndex(index: number): void {
   write('rsg.event', String(index));
 }
+
+export type GameMode = 'single' | 'competition';
+
+/** Menüwahl MODUS – eine Einstellung, kein Spielstand */
+export function loadMode(): GameMode {
+  return read('rsg.mode') === 'competition' ? 'competition' : 'single';
+}
+
+export function saveMode(mode: GameMode): void {
+  write('rsg.mode', mode);
+}

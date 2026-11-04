@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { sfx } from '../audio/sfx';
 import { CAMERA_LEAD_X, COLORS, GAME_WIDTH, LANE_DEPTH, PX_PER_M, TRACK_FAR_Y, laneCenterY, skewAt } from '../config';
-import { COUNTRIES, type Country } from '../data/countries';
+import { COUNTRIES, countryByCode, type Country } from '../data/countries';
+import { getCompetition } from '../data/session';
 import { loadLookSeed } from '../data/storage';
 import {
   carryPole,
@@ -46,6 +47,7 @@ import {
   type VaultState,
   type Vaulter,
 } from '../sim/polevault';
+import { confirmAbort } from './ConfirmScene';
 import type { ResultRow, ResultSceneData } from './ResultScene';
 
 const SIM_DT = 1 / 120;
@@ -141,15 +143,22 @@ export class PoleVaultScene extends Phaser.Scene {
     const others = Phaser.Utils.Array.Shuffle(COUNTRIES.filter((_, i) => i !== this.countryIndex));
     const profiles = Phaser.Utils.Array.Shuffle([...VAULT_CPU_PROFILES]);
     const country = COUNTRIES[this.countryIndex];
+    // Im Wettkampf tritt immer dasselbe Feld an
+    const field = getCompetition()?.field;
     this.player = {
       country,
-      look: createLook(country, loadLookSeed(), 1),
+      look: createLook(country, field?.find((f) => f.isPlayer)?.lookSeed ?? loadLookSeed(), 1),
       vaulter: createVaulter(0, true),
       profile: null,
     };
-    const cpus: Entrant[] = profiles.map((profile, i) => ({
-      country: others[i],
-      look: createLook(others[i], Math.floor(Math.random() * 1e9), i + 2),
+    const opponents = field
+      ? field
+          .filter((f) => !f.isPlayer)
+          .map((f) => ({ country: countryByCode(f.code), seed: f.lookSeed, profile: VAULT_CPU_PROFILES[f.profile ?? 0] }))
+      : profiles.map((profile, i) => ({ country: others[i], seed: Math.floor(Math.random() * 1e9), profile }));
+    const cpus: Entrant[] = opponents.map(({ country: c, seed, profile }, i) => ({
+      country: c,
+      look: createLook(c, seed, i + 2),
       vaulter: createVaulter(i + 1, false, profile.opening),
       profile,
     }));
@@ -178,7 +187,8 @@ export class PoleVaultScene extends Phaser.Scene {
       return;
     }
     const e = this.entrantOf(vaulter);
-    const note = this.player.vaulter.out ? 'DU BIST AUSGESCHIEDEN – ESC: MENÜ' : '';
+    const exit = getCompetition() ? 'ENTER: ZUM ERGEBNIS' : 'ESC: MENÜ';
+    const note = this.player.vaulter.out ? `DU BIST AUSGESCHIEDEN – ${exit}` : '';
     this.showBoard(`${e.country.name} – ${attempt}. VERSUCH`, note);
     // Ist man selbst ausgeschieden, läuft der Rest zügiger durch
     const delay = this.player.vaulter.out ? 350 : 900;
@@ -261,6 +271,18 @@ export class PoleVaultScene extends Phaser.Scene {
     this.nextTurn();
   }
 
+  /** Ausgeschieden im Wettkampf: die Gegner springen im Schnelldurchlauf zu Ende */
+  private finishRemaining(): void {
+    if (this.finished) return;
+    // Laufende Tafel-Abläufe verwerfen – ein noch nicht eingetragener Versuch wird hier nachgeholt
+    this.time.removeAllEvents();
+    for (let turn = this.competition.nextTurn(); turn && !turn.vaulter.isPlayer; turn = this.competition.nextTurn()) {
+      const e = this.entrantOf(turn.vaulter);
+      this.competition.record(turn.vaulter, cpuAttempt(e.profile!, this.competition.height, Math.random));
+    }
+    this.finish();
+  }
+
   private finish(): void {
     if (this.finished) return;
     this.finished = true;
@@ -297,9 +319,11 @@ export class PoleVaultScene extends Phaser.Scene {
 
   private onKeyDown(ev: KeyboardEvent): void {
     sfx.unlock();
-    if (ev.repeat) return;
+    if (ev.repeat || this.scene.isPaused()) return;
+    const competition = getCompetition() !== null;
     if (ev.code === 'Escape') {
-      this.scene.start('title');
+      if (competition) confirmAbort(this);
+      else this.scene.start('title');
       return;
     }
     if (ev.code === 'KeyM') {
@@ -309,6 +333,10 @@ export class PoleVaultScene extends Phaser.Scene {
     const confirm = ev.code === 'Enter' || ev.code === 'NumpadEnter';
 
     if (this.mode === 'board') {
+      if (competition && confirm && this.player.vaulter.out) {
+        this.finishRemaining();
+        return;
+      }
       if (!this.waitingForPlayer) return;
       const v = this.player.vaulter;
       if (confirm || ev.code === 'Space') {
