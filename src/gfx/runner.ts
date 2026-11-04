@@ -212,16 +212,16 @@ export function wavePose(time: number): Pose {
   return p;
 }
 
-/** Pokal mit beiden Händen über den Kopf stemmen – `time` lässt ihn auf und ab pumpen. */
+/**
+ * Pokal mit beiden Händen über den Kopf stemmen. Die Arme gehen schräg nach vorne,
+ * damit das Gesicht sichtbar bleibt; `time` lässt den Pokal leicht pumpen.
+ */
 export function trophyPose(time: number): Pose {
   const p = standPose();
-  const bend = 0.5 + 0.5 * Math.sin(time * 6);
+  const pump = 0.5 + 0.5 * Math.sin(time * 6);
   p.lean = -0.04;
-  p.nearArm = { upper: Math.PI - 0.15 - 0.3 * bend, lower: Math.PI - 0.05 + 0.3 * bend };
-  p.farArm = { upper: Math.PI - 0.05 - 0.3 * bend, lower: Math.PI + 0.05 + 0.3 * bend };
-  // Leicht in die Knie gehen, wenn der Pokal unten ist
-  p.nearLeg = { upper: 0.06 + 0.12 * bend, lower: 0.04 - 0.1 * bend };
-  p.hip -= bend;
+  p.nearArm = { upper: Math.PI - 0.9 + 0.2 * pump, lower: Math.PI - 0.12 - 0.2 * pump };
+  p.farArm = { upper: Math.PI - 0.8 + 0.2 * pump, lower: Math.PI - 0.05 - 0.2 * pump };
   return p;
 }
 

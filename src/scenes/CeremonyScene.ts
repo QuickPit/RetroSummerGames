@@ -25,7 +25,7 @@ import { cheerPose, createLook, drawRunner, handOffset, trophyPose, wavePose, ty
 import { ceremonyPodium, medalTable, type CompetitionState, type PodiumGroup } from '../sim/competition';
 
 const PODIUM_BASE = 296;
-const STEP_H: Record<number, number> = { 1: 44, 2: 32, 3: 22 };
+const STEP_H: Record<number, number> = { 1: 46, 2: 36, 3: 28 };
 const MAST_TOP: Record<number, number> = { 1: 56, 2: 74, 3: 88 };
 const MAST_BOTTOM = NIGHT.grassY + 4;
 const MAST_GAP = 48;
@@ -234,10 +234,10 @@ export class CeremonyScene extends Phaser.Scene {
     const order: { code: string; rank: number }[] = [];
     for (const { group: grp, cx } of slots) {
       if (!grp) continue;
-      const h = STEP_H[grp.rank] ?? 22;
+      const h = STEP_H[grp.rank] ?? 28;
       drawPodiumStep(g, cx, PODIUM_BASE, width(grp.codes.length), h, grp.rank);
       this.add
-        .text(cx, PODIUM_BASE - h + 9, String(grp.rank), { fontFamily: FONT, fontSize: '16px', color: '#10101c' })
+        .text(cx + 1, PODIUM_BASE - h + 7, String(grp.rank), { fontFamily: FONT, fontSize: '16px', color: '#10101c' })
         .setOrigin(0.5, 0)
         .setDepth(-8);
       grp.codes.forEach((code, i) => {
@@ -258,7 +258,7 @@ export class CeremonyScene extends Phaser.Scene {
 
     // Masten in der Reihenfolge der Athleten, Mast und Flagge zusammen mittig
     order.forEach(({ code, rank }, i) => {
-      const x = Math.round(GAME_WIDTH / 2 + (i - (order.length - 1) / 2) * MAST_GAP - FLAG_W / 2);
+      const x = Math.round(GAME_WIDTH / 2 + (i - (order.length - 1) / 2) * MAST_GAP - FLAG_W / 2 - 8);
       const key = `ceremonyFlag-${code}`;
       createFlagTexture(this, key, countryByCode(code).flag);
       const slices: Phaser.GameObjects.Image[] = [];

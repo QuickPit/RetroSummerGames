@@ -162,11 +162,11 @@ export function drawPodiumStep(g: Gfx, cx: number, base: number, w: number, h: n
   g.fillRect(x, top, w, 3);
   g.fillStyle(0xffffff, 0.45);
   g.fillRect(x, top, w, 1);
-  // Plakette für die Ziffer
+  // Plakette für die Ziffer (die Szene setzt sie bei top + 7)
   g.fillStyle(0xbcc0d2, 1);
-  g.fillRect(Math.round(cx) - 11, top + 7, 22, 20);
+  g.fillRect(Math.round(cx) - 11, top + 5, 22, 20);
   g.fillStyle(0xeeeff6, 1);
-  g.fillRect(Math.round(cx) - 10, top + 8, 20, 18);
+  g.fillRect(Math.round(cx) - 10, top + 6, 20, 18);
 }
 
 /** Fahnenmast mit goldener Kugel und Leine; (x, top) = Mastspitze */
