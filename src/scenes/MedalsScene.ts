@@ -109,7 +109,7 @@ export class MedalsScene extends Phaser.Scene {
     const prompt = this.text(
       GAME_WIDTH / 2,
       330,
-      this.mode === 'final' ? 'ENTER: ZURÜCK ZUM MENÜ' : 'ENTER: WEITER   ESC: ABBRECHEN',
+      this.mode === 'final' ? 'ENTER: ABSCHLUSSFEIER' : 'ENTER: WEITER   ESC: ABBRECHEN',
       8,
       '#f7d038',
     ).setOrigin(0.5, 0);
@@ -135,7 +135,8 @@ export class MedalsScene extends Phaser.Scene {
         sfx.confirm();
         this.proceed();
       } else if (ev.code === 'Escape') {
-        if (this.mode === 'final') this.proceed();
+        // Im Endstand überspringt ESC die Feier und führt direkt ins Menü
+        if (this.mode === 'final') this.toMenu();
         else confirmAbort(this);
       } else if (ev.code === 'KeyM') {
         sfx.toggleMute();
@@ -156,8 +157,7 @@ export class MedalsScene extends Phaser.Scene {
   private proceed(): void {
     this.leaving = true;
     if (this.mode === 'final') {
-      endCompetition();
-      this.scene.start('title');
+      this.scene.start('ceremony');
       return;
     }
     const next = currentEvent(this.state);
@@ -167,6 +167,12 @@ export class MedalsScene extends Phaser.Scene {
     }
     const countryIndex = Math.max(0, COUNTRIES.findIndex((c) => c.code === this.playerCode()));
     this.scene.start(eventByKey(next).scene, { countryIndex });
+  }
+
+  private toMenu(): void {
+    this.leaving = true;
+    endCompetition();
+    this.scene.start('title');
   }
 
   private drawTable(): void {

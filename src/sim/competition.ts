@@ -145,3 +145,25 @@ export function playerStanding(s: CompetitionState): PlayerStanding {
   if (me.rank > 1) return { kind: 'behind', rank: me.rank };
   return { kind: table.filter((r) => r.rank === 1).length === 1 ? 'leader' : 'tied', rank: 1 };
 }
+
+export interface PodiumGroup {
+  /** Rang im Medaillenspiegel (1–3, bei Gleichstand „1, 1, 3“) */
+  rank: number;
+  /** Nationen auf dieser Stufe, A–Z */
+  codes: string[];
+}
+
+/**
+ * Podest der Abschlussfeier: Ränge 1–3 des Medaillenspiegels, Gleichstand teilt sich die Stufe.
+ * Nationen ohne Medaille kommen nicht aufs Podest – ohne jede Medaille ist es leer.
+ */
+export function ceremonyPodium(s: CompetitionState): PodiumGroup[] {
+  const groups: PodiumGroup[] = [];
+  for (const row of medalTable(s)) {
+    if (row.rank > 3 || row.total === 0) continue;
+    const group = groups.find((g) => g.rank === row.rank);
+    if (group) group.codes.push(row.code);
+    else groups.push({ rank: row.rank, codes: [row.code] });
+  }
+  return groups;
+}

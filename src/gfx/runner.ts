@@ -212,6 +212,19 @@ export function wavePose(time: number): Pose {
   return p;
 }
 
+/** Pokal mit beiden Händen über den Kopf stemmen – `time` lässt ihn auf und ab pumpen. */
+export function trophyPose(time: number): Pose {
+  const p = standPose();
+  const bend = 0.5 + 0.5 * Math.sin(time * 6);
+  p.lean = -0.04;
+  p.nearArm = { upper: Math.PI - 0.15 - 0.3 * bend, lower: Math.PI - 0.05 + 0.3 * bend };
+  p.farArm = { upper: Math.PI - 0.05 - 0.3 * bend, lower: Math.PI + 0.05 + 0.3 * bend };
+  // Leicht in die Knie gehen, wenn der Pokal unten ist
+  p.nearLeg = { upper: 0.06 + 0.12 * bend, lower: 0.04 - 0.1 * bend };
+  p.hip -= bend;
+  return p;
+}
+
 /** Erschöpft: Hände auf den Oberschenkeln, schweres Atmen. */
 export function tiredPose(time: number): Pose {
   const breath = Math.sin(time * 5);

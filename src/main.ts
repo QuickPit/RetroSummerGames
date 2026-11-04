@@ -3,6 +3,7 @@ import Phaser from 'phaser';
 import { GAME_HEIGHT, GAME_WIDTH } from './config';
 import { BmxScene } from './scenes/BmxScene';
 import { BootScene } from './scenes/BootScene';
+import { CeremonyScene } from './scenes/CeremonyScene';
 import { ConfirmScene } from './scenes/ConfirmScene';
 import { LongJumpScene } from './scenes/LongJumpScene';
 import { MedalsScene } from './scenes/MedalsScene';
@@ -33,7 +34,7 @@ async function start(): Promise<void> {
       autoCenter: Phaser.Scale.CENTER_BOTH,
     },
     // Die Rückfrage liegt als Overlay über allen anderen Szenen
-    scene: [BootScene, TitleScene, RaceScene, PoleVaultScene, LongJumpScene, BmxScene, ResultScene, MedalsScene, ConfirmScene],
+    scene: [BootScene, TitleScene, RaceScene, PoleVaultScene, LongJumpScene, BmxScene, ResultScene, MedalsScene, CeremonyScene, ConfirmScene],
   });
 
   // Für automatisierte Tests im Entwicklungsmodus erreichbar machen.
