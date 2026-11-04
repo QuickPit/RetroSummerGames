@@ -242,8 +242,9 @@ export class ResultScene extends Phaser.Scene {
         mood: 'joy',
         time: t,
         medal: MEDALS[rank],
-        // In der Schwimmhalle stehen die Sieger mit Badekappe auf dem Podest
-        cap: this.hall ? r.look.jersey : undefined,
+        // In der Halle barfuß im Badeanzug; Schwimmer mit Kappe, Turmspringer ohne
+        cap: this.hall && this.result.event === 'swim' ? r.look.jersey : undefined,
+        barefoot: this.hall !== null,
       });
     }
   }

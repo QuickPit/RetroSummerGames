@@ -168,7 +168,7 @@ describe('Gesamtsieger', () => {
 
 describe('recordEvent', () => {
   it('spielt die Disziplinen in der festen Reihenfolge', () => {
-    expect([...COMPETITION_ORDER]).toEqual(['110h', 'long', 'pole', 'swim', 'bmx']);
+    expect([...COMPETITION_ORDER]).toEqual(['110h', 'long', 'pole', 'swim', 'dive', 'bmx']);
     let s = fixed();
     for (const key of COMPETITION_ORDER) {
       expect(currentEvent(s)).toBe(key);

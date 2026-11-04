@@ -533,8 +533,8 @@ export class SwimHall {
       this.clockText.setText(text);
     }
     this.clockText.setPosition(cx + 1, 29);
-    // Breite wächst mit dem Text (Punkte haben mehr Stellen als Zeiten)
-    const half = Math.max(38, this.clockShown.length * 8 + 6);
+    // Zeiten wie „46.50“ im gewohnten Kasten; längere Texte (Punkte) bekommen einen breiteren (16-px-Glyphen)
+    const half = this.clockShown.length <= 5 ? 38 : this.clockShown.length * 8 + 4;
     if (cx === Math.round(150 - this.drawnCam * 0.1) && half === this.clockHalf) return;
     this.clockHalf = half;
     const g = this.clockGfx;

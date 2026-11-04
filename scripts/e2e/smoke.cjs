@@ -90,6 +90,7 @@ function botInPage(kind) {
 
   // Node setzt das Flag, wenn sein Zeitlimit greift – dann keine Tasten mehr schicken
   window.__botStop = false;
+  window.__botPause = false;
   return new Promise((resolve) => {
     const started = performance.now();
     const timer = setInterval(() => {
@@ -98,7 +99,8 @@ function botInPage(kind) {
         resolve({ ok: false, log: [...log, 'abgebrochen'] });
         return;
       }
-      if (active('confirm')) return;
+      // Während einer Rückfrage – oder wenn Node den Bot für eine Prüfung anhält – keine Tasten
+      if (active('confirm') || window.__botPause) return;
       if (active('result')) {
         clearInterval(timer);
         resolve(mem.failed ? { ok: false, log: [...log, `✗ ${mem.failed}`] } : { ok: true, log });
@@ -264,18 +266,34 @@ function botInPage(kind) {
         }
         if (sc.phase === 'select') {
           m.holding = false;
+          m.reheld = false;
           m.twists = 0;
           shotOnce(`${r}-1-select`);
           // Kurz warten, damit das Panel fotografiert werden kann
-          if (!m.selectAt) m.selectAt = performance.now();
-          if (performance.now() - m.selectAt < 600) return;
+          const now = performance.now();
+          if (!m.selectAt) m.selectAt = now;
+          if (now - m.selectAt < 600) return;
+          // Je Tastendruck abwarten, bis die Szene die neue Zeile zeigt (sonst springt die Wahl zu weit);
+          // ENTER erst, wenn die gewünschte Zeile eine Weile stehen bleibt
           const want = ORDER.indexOf(WANT[sc.round]);
-          if (sc.selection !== want) once(`sel${r}-${sc.selection}`, () => press('ArrowDown'));
-          else once(`go${r}`, () => press('Enter'));
+          if (sc.selection !== m.seenSel) {
+            m.seenSel = sc.selection;
+            m.seenAt = now;
+          }
+          if (sc.selection !== want) {
+            if (!m.pressAt || m.pressSel !== sc.selection || now - m.pressAt > 400) {
+              m.pressAt = now;
+              m.pressSel = sc.selection;
+              press('ArrowDown');
+            }
+          } else if (now - m.seenAt > 150) {
+            once(`go${r}`, () => press('Enter'));
+          }
           return;
         }
         const s = sc.diver;
         if (!s) return;
+        if (s.def.id !== WANT[sc.round] && !mem.failed) mem.failed = `Sprung ${r}: ${s.def.id} statt ${WANT[sc.round]} gewählt`;
         if (sc.verdictReady) {
           once(`done${r}`, () => {
             const j = sc.judgement;
@@ -309,6 +327,11 @@ function botInPage(kind) {
           const air = t - s.takeoffAt;
           if (air > 0.5) shotOnce(`${r}-3-air`);
           const target = s.def.somersaults * 360;
+          // Nach einer Rückfrage gilt die Leertaste als losgelassen – neu drücken, der Salto dreht weiter
+          if (m.holding && !s.held && !m.reheld) {
+            m.reheld = true;
+            send('keydown', 'Space');
+          }
           if (m.holding && s.held) {
             // Drehung bis jetzt vorausrechnen – der Zustand ist bis zu einem Bild alt
             const rot = s.rot + s.power * SPIN[s.def.position] * 360 * Math.max(0, t - s.time);
@@ -485,6 +508,72 @@ async function runCompetition(browser) {
       }
     }, [a, b]);
 
+  // Turmspringen: Rückfrage im Schwung (1. Sprung) und in der Luft mit gehaltener Leertaste (3. Sprung).
+  // Der Bot ruht währenddessen, damit er die Zustände nach NEIN nicht sofort verändert.
+  const diveState = () =>
+    page.evaluate(() => {
+      const sc = window.__game.scene.getScene('dive');
+      const s = sc.diver;
+      return {
+        time: s.time,
+        t0: s.t0,
+        phase: s.phase,
+        held: s.held,
+        openAt: s.openAt,
+        rot: s.rot,
+        sim: sc.simTime,
+        paused: window.__game.scene.isPaused('dive'),
+      };
+    });
+  const diveConfirm = async () => {
+    await page.evaluate(() => (window.__botPause = true));
+    await page.keyboard.press('Escape');
+    await waitActive('confirm');
+    const before = await diveState();
+    await page.waitForTimeout(1000);
+    const mid = await diveState();
+    await page.keyboard.press('KeyN');
+    await page.waitForFunction(() => !window.__game.scene.isPaused('dive') && !window.__game.scene.isActive('confirm'), null, {
+      timeout: 5_000,
+    });
+    await page.waitForTimeout(60);
+    const after = await diveState();
+    check(mid.paused && mid.time === before.time, `Turmspringen läuft während der Rückfrage weiter: ${JSON.stringify(mid)}`);
+    check(after.time - before.time < 0.25 && after.sim - after.time < 0.1, `Zeitsprung nach NEIN: ${JSON.stringify({ before, after })}`);
+    return { before, after };
+  };
+  const checkDiveConfirm = async (i) => {
+    await page.waitForFunction(
+      () => {
+        const sc = window.__game.scene.getScene('dive');
+        const s = sc.diver;
+        return sc.round === 0 && s && s.phase === 'swing' && s.time - s.t0 > 1;
+      },
+      null,
+      { timeout: 60_000, polling: 16 },
+    );
+    let { before, after } = await diveConfirm();
+    check(after.phase === 'swing' && after.t0 === before.t0, `Takt nach NEIN verschoben: ${JSON.stringify({ before, after })}`);
+    log.push(`Rückfrage im Schwung: Sim-Zeit ${before.time.toFixed(2)} → ${after.time.toFixed(2)} s, Takt unverändert`);
+    await page.evaluate(() => (window.__botPause = false));
+
+    await page.waitForFunction(
+      () => {
+        const sc = window.__game.scene.getScene('dive');
+        const s = sc.diver;
+        return sc.round === 2 && s && s.phase === 'air' && s.held && s.time - s.takeoffAt > 0.15;
+      },
+      null,
+      { timeout: 90_000, polling: 16 },
+    );
+    ({ before, after } = await diveConfirm());
+    check(before.held && !after.held && after.phase === 'air', `Gehaltene Leertaste nach NEIN: ${JSON.stringify({ before, after })}`);
+    check(Math.abs(after.openAt - before.time) < 0.02, `Öffnen nicht zum Zeitpunkt der Rückfrage: ${JSON.stringify({ before, after })}`);
+    await shot(`${2 + i}-dive-air`);
+    log.push(`Rückfrage in der Luft: losgelassen bei ${before.time.toFixed(2)} s (${Math.round(before.rot)}°), danach ${after.time.toFixed(2)} s`);
+    await page.evaluate(() => (window.__botPause = false));
+  };
+
   let ok = true;
   try {
     await page.goto(URL);
@@ -528,7 +617,7 @@ async function runCompetition(browser) {
         await page.keyboard.press('Enter');
       }
       await page.waitForFunction(
-        () => ['race', 'polevault', 'longjump', 'swim', 'bmx'].some((k) => window.__game.scene.isActive(k)),
+        () => ['race', 'polevault', 'longjump', 'swim', 'dive', 'bmx'].some((k) => window.__game.scene.isActive(k)),
         null,
         { timeout: 15_000 },
       );
@@ -619,6 +708,7 @@ async function runCompetition(browser) {
         );
         await shot(`${2 + i}-swim-turn`);
       }
+      if (scene === 'dive') await checkDiveConfirm(i);
       const r = await botRun;
       for (const line of r.log) log.push(`${bot}: ${line}`);
       check(r.ok, `Bot ${bot} hat die Siegerehrung nicht erreicht`);
@@ -635,7 +725,7 @@ async function runCompetition(browser) {
         const champ = pv.rows.find((row) => row.code === pv.champ);
         check(champ && champ.valid, `Champion ${pv.champ} ohne gültige Höhe`);
       }
-      if (scene === 'swim') check((await room()) === 'hall', 'Siegerehrung Schwimmen ohne Hallenklang');
+      if (scene === 'swim' || scene === 'dive') check((await room()) === 'hall', `Siegerehrung ${scene} ohne Hallenklang`);
       const mode = i < EVENT_COUNT - 1 ? 'between' : 'final';
       if (i === 0) {
         // Fall B: ENTER und ESC im selben Bild in der Siegerehrung
@@ -682,7 +772,7 @@ async function runCompetition(browser) {
       }
     }
     check(order.join(',') === expectedOrder.join(','), `Falsche Reihenfolge: ${order.join(',')} statt ${expectedOrder.join(',')}`);
-    check(order.join(',') === 'race,longjump,polevault,swim,bmx', `Reihenfolge weicht von der Spec ab: ${order.join(',')}`);
+    check(order.join(',') === 'race,longjump,polevault,swim,dive,bmx', `Reihenfolge weicht von der Spec ab: ${order.join(',')}`);
     log.push(`Reihenfolge: ${order.join(' → ')}`);
 
     const final = await page.evaluate(() => {

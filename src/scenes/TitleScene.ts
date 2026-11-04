@@ -32,7 +32,7 @@ const VALUE_X = 370;
 const HELP_Y = 232;
 const ROW = { mode: 0, event: 1, nation: 2, look: 3 };
 const COMPETITION_HELP: [string, string][] = [
-  ['REIHENFOLGE', 'HÜR - WEIT - STAB - SCHW - BMX'],
+  ['REIHENFOLGE', 'HÜR-WEIT-STAB-SCHW-TURM-BMX'],
   ['WERTUNG', 'MEDAILLENSPIEGEL DER NATIONEN'],
   ['STEUERUNG', 'VOR JEDER DISZIPLIN ERKLÄRT'],
   ['PFEIL HOCH/RUNTER', 'MENÜ: ZEILE WÄHLEN'],
