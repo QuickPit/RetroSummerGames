@@ -1,1 +1,10 @@
-{}
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev*)", "Bash(npm run build*)", "Bash(npm run typecheck*)",
+      "Bash(npm test*)", "Bash(npm run e2e*)", "Bash(NODE_PATH=$(npm root -g) npm run e2e*)",
+      "Bash(npm install --package-lock-only*)", "Bash(npx tsc*)", "Bash(npx vitest*)",
+      "Bash(npx vite*)", "Bash(git status*)", "Bash(git diff*)", "Bash(git log*)", "Bash(git show*)"
+    ]
+  }
+}
