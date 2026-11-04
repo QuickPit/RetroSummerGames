@@ -30,6 +30,7 @@ export function createRng(seed: number): () => number {
   };
 }
 
+/** Normalverteilte Zufallszahl (Box-Muller), Mittelwert 0, σ 1 */
 export function gaussian(rng: () => number): number {
   const u = Math.max(rng(), 1e-9);
   const v = rng();

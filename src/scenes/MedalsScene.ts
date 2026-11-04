@@ -39,7 +39,7 @@ export interface MedalsSceneData {
 // Spalten: Pfeil-Schild „DU“, Platz, Flagge, Code, Name, Medaillen (Mitte der Scheibe), Disziplinen (Mitte)
 const COL = { tag: 46, place: 76, flag: 100, code: 122, name: 154, gold: 266, silver: 294, bronze: 322 };
 const DIVIDER_X = 342;
-const EVENT_LABELS: Record<EventKey, string> = { '110h': 'HÜR', long: 'WEIT', pole: 'STAB', swim: 'SCHW', bmx: 'BMX' };
+const EVENT_LABELS: Record<EventKey, string> = { '110h': 'HÜR', long: 'WEIT', pole: 'STAB', swim: 'SCHW', dive: 'TURM', bmx: 'BMX' };
 const EVENT_COLS: { key: EventKey; label: string; x: number }[] = COMPETITION_ORDER.map((key, i) => ({
   key,
   label: EVENT_LABELS[key],

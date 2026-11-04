@@ -25,9 +25,10 @@ const DISCIPLINES = {
   long: { scene: 'longjump' },
   bmx: { scene: 'bmx' },
   swim: { scene: 'swim' },
+  dive: { scene: 'dive' },
   wettkampf: { competition: true },
 };
-const BOT_OF_SCENE = { race: 'hurdles', polevault: 'pole', longjump: 'long', bmx: 'bmx', swim: 'swim' };
+const BOT_OF_SCENE = { race: 'hurdles', polevault: 'pole', longjump: 'long', bmx: 'bmx', swim: 'swim', dive: 'dive' };
 
 // ---------------------------------------------------------------- Bot im Browser
 // Läuft per page.evaluate im Spiel. Liest den Zustand der Szene in jedem Takt
@@ -77,6 +78,15 @@ function botInPage(kind) {
     press(side ? 'ArrowRight' : 'ArrowLeft');
     side ^= 1;
   };
+
+  // Bildschirmfotos an bestimmten Stellen: Node holt die Namen ab und fotografiert sofort
+  window.__shots = [];
+  const shotOnce = (name) => {
+    if (mem.shots.has(name)) return;
+    mem.shots.add(name);
+    window.__shots.push(name);
+  };
+  mem.shots = new Set();
 
   // Node setzt das Flag, wenn sein Zeitlimit greift – dann keine Tasten mehr schicken
   window.__botStop = false;
@@ -220,6 +230,105 @@ function botInPage(kind) {
           mem.turned = true;
           press('Space');
         }
+      } else if (kind === 'dive') {
+        const sc = game.scene.getScene('dive');
+        // Sprünge je Durchgang; Reihenfolge der Liste wie DIVES in sim/dive.ts
+        const WANT = ['25h', '15s2', '15p'];
+        const ORDER = ['kopf', '15h', '15p', '25h', '25p', '15s2', '35h', '45h'];
+        const SPIN = { tuck: 2.9, pike: 2.25, straight: 1.5 };
+        if (!mem.dive) mem.dive = { key: '', results: [], started: performance.now(), holding: false, twists: 0 };
+        const m = mem.dive;
+        // Jede Taste nur einmal je Zustand – die Szene verarbeitet sie erst im nächsten Bild
+        const once = (key, fn) => {
+          if (m.key === key) return;
+          m.key = key;
+          fn();
+        };
+        if (sc.finished) {
+          once('finished', () => {
+            const total = m.results.reduce((a, j) => a + j.points, 0);
+            const seconds = (performance.now() - m.started) / 1000;
+            log.push(`Gesamt: ${total.toFixed(2)} P nach ${seconds.toFixed(0)} s`);
+            if (m.results.length !== 3) mem.failed = `${m.results.length} statt 3 Sprünge gewertet`;
+            else if (m.results.some((j) => j.fail)) mem.failed = 'Fehlsprung in der Serie';
+            else if (total <= 120) mem.failed = `Summe ${total.toFixed(2)} nicht über 120`;
+            else if (seconds < 30 || seconds > 90) mem.failed = `Dauer ${seconds.toFixed(0)} s außerhalb 30–90 s`;
+          });
+          return;
+        }
+        const r = sc.round + 1;
+        if (sc.phase === 'board') {
+          m.selectAt = 0;
+          if (sc.waitingForPlayer) once(`board${r}`, () => press('Enter'));
+          return;
+        }
+        if (sc.phase === 'select') {
+          m.holding = false;
+          m.twists = 0;
+          shotOnce(`${r}-1-select`);
+          // Kurz warten, damit das Panel fotografiert werden kann
+          if (!m.selectAt) m.selectAt = performance.now();
+          if (performance.now() - m.selectAt < 600) return;
+          const want = ORDER.indexOf(WANT[sc.round]);
+          if (sc.selection !== want) once(`sel${r}-${sc.selection}`, () => press('ArrowDown'));
+          else once(`go${r}`, () => press('Enter'));
+          return;
+        }
+        const s = sc.diver;
+        if (!s) return;
+        if (sc.verdictReady) {
+          once(`done${r}`, () => {
+            const j = sc.judgement;
+            m.results.push(j);
+            log.push(
+              `Sprung ${r} ${j.dive}: ${j.rating}, Noten ${j.notes.map((n) => n.toFixed(1)).join(' ')} → ` +
+                `${j.sum.toFixed(1)} × ${j.dd} = ${j.points.toFixed(2)} P (Absprung ${Math.round(j.quality * 100)}%, ` +
+                `Schwung ${Math.round(j.swing * 100)}%, ${Math.round(j.delta)}°, Tipp ${j.tip})`,
+            );
+            // Erst die hochgezählte Wertung fotografieren, dann weiter
+            setTimeout(() => {
+              shotOnce(`${r}-5-verdict`);
+              setTimeout(() => press('Enter'), 1500);
+            }, 700);
+          });
+          return;
+        }
+        const t = sc.simTime;
+        if (s.phase === 'ready' || s.phase === 'swing') {
+          steadyTap(10);
+          if (s.phase === 'swing' && t - s.t0 >= 1.5) shotOnce(`${r}-2-swing`);
+          if (s.phase === 'swing' && !m.holding && t - s.t0 >= 2.5) {
+            const k = Math.max(0, Math.round((t - s.t0 - 0.25) / 1.0));
+            const toPeak = s.t0 + 0.25 + k - t;
+            if (Math.abs(toPeak) < 0.02) {
+              m.holding = true;
+              send('keydown', 'Space');
+            }
+          }
+        } else if (s.phase === 'air') {
+          const air = t - s.takeoffAt;
+          if (air > 0.5) shotOnce(`${r}-3-air`);
+          const target = s.def.somersaults * 360;
+          if (m.holding && s.held) {
+            // Drehung bis jetzt vorausrechnen – der Zustand ist bis zu einem Bild alt
+            const rot = s.rot + s.power * SPIN[s.def.position] * 360 * Math.max(0, t - s.time);
+            if (rot >= target - 20) {
+              m.holding = false;
+              send('keyup', 'Space');
+            }
+          }
+          if (s.def.twists > 0) {
+            if (m.twists === 0 && air >= 0.12) {
+              m.twists = 1;
+              press('ArrowUp');
+            } else if (m.twists === 1 && s.twistsDone >= 1 && s.twistStart === null) {
+              m.twists = 2;
+              press('ArrowUp');
+            }
+          }
+        } else if (s.phase === 'water') {
+          shotOnce(`${r}-4-entry`);
+        }
       } else if (kind === 'bmx') {
         const sc = game.scene.getScene('bmx');
         if (sc.phase === 'ready') press('Enter');
@@ -301,17 +410,26 @@ async function runDiscipline(browser, kind) {
     window.__game.scene.getScene('title').scene.start(scene, { countryIndex: 0 });
   }, DISCIPLINES[kind].scene);
 
-  // Während der Bot spielt, regelmäßig Screenshots machen
+  // Während der Bot spielt, regelmäßig Screenshots machen – und sofort, wenn der Bot einen anfordert
   let shot = 1;
   const shooter = setInterval(() => {
     page.screenshot({ path: path.join(OUT, `${kind}-${shot++}.png`) }).catch(() => {});
   }, 4000);
+  let busy = false;
+  const requested = setInterval(async () => {
+    if (busy) return;
+    busy = true;
+    const names = await page.evaluate(() => (window.__shots || []).splice(0)).catch(() => []);
+    for (const name of names) await page.screenshot({ path: path.join(OUT, `${kind}-${name}.png`) }).catch(() => {});
+    busy = false;
+  }, 40);
   const started = Date.now();
   let result;
   try {
     result = await runBot(page, kind);
   } finally {
     clearInterval(shooter);
+    clearInterval(requested);
   }
   await page.waitForTimeout(1500);
   await page.screenshot({ path: path.join(OUT, `${kind}-result.png`) });

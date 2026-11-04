@@ -9,7 +9,7 @@ export interface JumpBoardRow {
   isPlayer: boolean;
   /** Ist gerade an der Reihe */
   current: boolean;
-  /** Je Durchgang: Weite, 'X' für ungültig, '' für noch offen */
+  /** Je Durchgang: Weite bzw. Punkte, 'X' für ungültig, '' für noch offen */
   attempts: string[];
   best: string;
 }
@@ -28,7 +28,8 @@ export class JumpBoard {
   private readonly footer2: Phaser.GameObjects.Text;
   private rows: JumpBoardRow[] = [];
 
-  constructor(scene: Phaser.Scene, title: string, rowCount: number, rounds: number) {
+  /** `bestHeader`: Kopf der letzten Spalte, z. B. 'GESAMT' beim Turmspringen */
+  constructor(scene: Phaser.Scene, title: string, rowCount: number, rounds: number, bestHeader = 'BEST') {
     const text = (x: number, y: number, s: string, size = 8, color = '#ffffff') =>
       scene.add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, color });
     this.g = scene.add.graphics();
@@ -38,7 +39,7 @@ export class JumpBoard {
     const headers = [
       text(X.name, 112, 'NATION', 8, header),
       ...Array.from({ length: rounds }, (_, i) => text(X.attempts[i], 112, `${i + 1}.`, 8, header)),
-      text(X.best, 112, 'BEST', 8, header),
+      text(X.best, 112, bestHeader, 8, header),
     ];
     for (let i = 0; i < rowCount; i++) {
       const y = ROW_Y + i * ROW_H;
