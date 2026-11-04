@@ -15,6 +15,7 @@ import {
   drawDrops,
   drawFlipTurn,
   drawSwimmer,
+  drawSplashCrown,
   drawSwimmerUpright,
   drawWake,
   drawWaterRing,
@@ -61,6 +62,12 @@ const STROKE_ANIM = 0.12;
 const GLIDE_MAX = 2;
 /** Hinweis auf die Wende so weit vor der Wand */
 const TURN_HINT_AT = 8;
+/** Kopf bis Fußspitze eines Schwimmers in Pixeln */
+const BODY_PX = 48;
+/** Auf dieser Strecke nach der Wende rückt der gezeichnete Körper an seine wahre Lage */
+const PUSH_BLEND_PX = 6 * PX_PER_M;
+/** Wie lange eine Wasserkrone steht */
+const CROWN_LIFE = 0.6;
 
 type Phase = 'ready' | 'block' | 'marks' | 'falseStart' | 'race';
 
@@ -76,6 +83,8 @@ interface Competitor {
   glideFrom: number;
   drops: Drop[];
   rings: { x: number; r: number; life: number }[];
+  /** Wasserkronen beim Eintauchen und an der Wand (Welt-X, Restzeit) */
+  crowns: { x: number; life: number }[];
   gfx: Phaser.GameObjects.Graphics;
 }
 
@@ -147,6 +156,9 @@ export class SwimScene extends Phaser.Scene {
     kb.on('keydown', this.onKeyDown, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => kb.off('keydown', this.onKeyDown, this));
 
+    // Pfiff, Platscher und Publikum hallen in der Schwimmhalle nach
+    sfx.setRoom('hall');
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => sfx.setRoom('open'));
     sfx.crowd(0.3);
   }
 
@@ -177,6 +189,7 @@ export class SwimScene extends Phaser.Scene {
         glideFrom: 0,
         drops: [],
         rings: [],
+        crowns: [],
         gfx: this.add.graphics().setDepth(lane * 10 + 5),
       };
       if (!isPlayer) cpuIndex++;
@@ -362,8 +375,9 @@ export class SwimScene extends Phaser.Scene {
         break;
       case 'entry':
         c.glideFrom = this.simTime;
-        this.splash(c, this.headWorldX(c), 12, 1);
-        c.rings.push({ x: this.headWorldX(c), r: 5, life: 0.7 });
+        this.splash(c, this.headWorldX(c) - heading(c.state) * 8, 20, 1.15);
+        c.rings.push({ x: this.headWorldX(c), r: 5, life: 0.9 });
+        c.crowns.push({ x: this.headWorldX(c) - heading(c.state) * 6, life: CROWN_LIFE });
         if (p) sfx.plunge();
         break;
       case 'stroke':
@@ -402,7 +416,8 @@ export class SwimScene extends Phaser.Scene {
         }
         break;
       case 'wall':
-        this.splash(c, SWIM.poolLength * PX_PER_M - 10, 8, 1);
+        this.splash(c, SWIM.poolLength * PX_PER_M - 10, 10, 1);
+        c.crowns.push({ x: SWIM.poolLength * PX_PER_M - 12, life: CROWN_LIFE * 0.7 });
         break;
       case 'push':
         c.glideFrom = this.simTime;
@@ -410,7 +425,7 @@ export class SwimScene extends Phaser.Scene {
       case 'finish':
         c.place = ++this.finishOrder;
         this.hall.touch(c.lane, c.place, this.elapsed);
-        this.splash(c, 0, 8, 1);
+        this.splash(c, 4, 10, 1);
         c.rings.push({ x: 4, r: 4, life: 0.7 });
         if (p) {
           this.playerFinishedAt = this.simTime;
@@ -540,6 +555,10 @@ export class SwimScene extends Phaser.Scene {
     const remaining = SWIM.distance - p.d;
     const excitement =
       this.phase !== 'race' ? 0.1 : this.playerFinishedAt !== null ? 1 : Phaser.Math.Clamp(1 - remaining / 60, 0.3, 0.9);
+    // Weltrekord-Linie im Tempo von 46.50 s
+    const wr = (raceTime / SWIM.worldRecord) * SWIM.distance;
+    const wrOn = this.phase === 'race' && raceTime > 0 && wr <= SWIM.distance;
+    this.hall.setRecordLine(wrOn ? (wr <= SWIM.poolLength ? wr : SWIM.distance - wr) : null);
     this.hall.update(this.camPx, dt, this.elapsed, excitement, p.finishTime ?? raceTime);
 
     for (const c of this.competitors) this.drawCompetitor(c, raceTime, dt);
@@ -560,6 +579,18 @@ export class SwimScene extends Phaser.Scene {
     return Math.round(worldPx - this.camPx + skewAt(y));
   }
 
+  /**
+   * Gezeichnete Kopfspitze (Welt-Pixel): Nach dem Abstoß liegen die Füße an der Wand,
+   * deshalb wird der Körper auf den ersten Metern weich von der Wand weggeschoben.
+   */
+  private drawnHeadPx(s: SwimmerState): number {
+    const head = poolX(s) * PX_PER_M;
+    if (heading(s) > 0 || s.phase === 'flip' || s.phase === 'wall' || s.phase === 'open') return head;
+    const fromWall = SWIM.poolLength * PX_PER_M - head;
+    if (fromWall >= PUSH_BLEND_PX) return head;
+    return SWIM.poolLength * PX_PER_M - (BODY_PX + fromWall * (1 - BODY_PX / PUSH_BLEND_PX));
+  }
+
   /** Welt-X (Pixel) der Kopfspitze */
   private headWorldX(c: Competitor): number {
     return poolX(c.state) * PX_PER_M;
@@ -573,8 +604,9 @@ export class SwimScene extends Phaser.Scene {
         x: worldX + (Math.random() - 0.5) * 6,
         h: 1,
         vx: (Math.random() - 0.5) * 50 * power + dir * 10,
-        vh: (30 + Math.random() * 40) * power,
-        life: 0.5,
+        vh: (30 + Math.random() * 45) * power,
+        life: 0.45 + Math.random() * 0.25,
+        size: Math.random() < 0.3 ? 1 : Math.random() < 0.8 ? 2 : 3,
       });
     }
   }
@@ -592,6 +624,8 @@ export class SwimScene extends Phaser.Scene {
       r.r += 18 * dt;
     }
     c.rings = c.rings.filter((r) => r.life > 0);
+    for (const k of c.crowns) k.life -= dt;
+    c.crowns = c.crowns.filter((k) => k.life > 0);
   }
 
   private drawCompetitor(c: Competitor, raceTime: number, dt: number): void {
@@ -603,7 +637,7 @@ export class SwimScene extends Phaser.Scene {
     const dir = heading(s);
     const t = this.elapsed;
     // Kopfspitze liegt bei poolX, die Schulter etwas dahinter
-    const shoulderX = this.screenX(poolX(s) * PX_PER_M - dir * SWIMMER_HEAD_LEAD, waterY);
+    const shoulderX = this.screenX(this.drawnHeadPx(s) - dir * SWIMMER_HEAD_LEAD, waterY);
     let markerY = waterY - 30;
     let markerX = shoulderX;
 
@@ -658,6 +692,7 @@ export class SwimScene extends Phaser.Scene {
 
     const camX = this.camPx - skewAt(waterY);
     for (const r of c.rings) drawWaterRing(g, r.x - camX, waterY, r.r, t);
+    for (const k of c.crowns) drawSplashCrown(g, k.x - camX, waterY, 1 - k.life / CROWN_LIFE);
     drawDrops(g, c.drops, camX, waterY);
 
     if (c.isPlayer) {

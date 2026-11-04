@@ -1,11 +1,19 @@
 // Chiptune-Soundeffekte, komplett per Web Audio synthetisiert.
 
+export type Room = 'open' | 'hall';
+/** Anteil, der in den Hall geht */
+const ROOM_SEND: Record<Room, number> = { open: 0, hall: 0.45 };
+
 class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   private crowdGain: GainNode | null = null;
   private crowdSource: AudioBufferSourceNode | null = null;
+  /** Sammelschiene aller Klänge; von hier geht es trocken und über den Hall zum Master */
+  private bus: GainNode | null = null;
+  private reverbSend: GainNode | null = null;
+  private room: Room = 'open';
   muted = false;
 
   constructor() {
@@ -25,12 +33,49 @@ class Sfx {
       this.master = this.ctx.createGain();
       this.master.gain.value = this.muted ? 0 : 0.5;
       this.master.connect(this.ctx.destination);
+      this.bus = this.ctx.createGain();
+      this.bus.connect(this.master);
+      this.reverbSend = this.ctx.createGain();
+      this.reverbSend.gain.value = ROOM_SEND[this.room];
+      const reverb = this.ctx.createConvolver();
+      reverb.buffer = this.hallImpulse(1.8);
+      this.bus.connect(this.reverbSend).connect(reverb).connect(this.master);
       const len = this.ctx.sampleRate * 2;
       this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
       const data = this.noise.getChannelData(0);
       for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
+  }
+
+  /** Ziel aller Klänge (nur nach unlock() aufrufen) */
+  private get out(): AudioNode {
+    return this.bus ?? this.master!;
+  }
+
+  /** Raumklang: in der Schwimmhalle hallt alles nach */
+  setRoom(room: Room): void {
+    this.room = room;
+    if (this.reverbSend && this.ctx) this.reverbSend.gain.setTargetAtTime(ROOM_SEND[room], this.ctx.currentTime, 0.05);
+  }
+
+  /** Synthetische Impulsantwort: abklingendes Rauschen, Höhen verklingen schneller */
+  private hallImpulse(seconds: number): AudioBuffer {
+    const ctx = this.ctx!;
+    const len = Math.floor(ctx.sampleRate * seconds);
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const data = buf.getChannelData(ch);
+      let low = 0;
+      for (let i = 0; i < len; i++) {
+        const t = i / len;
+        // Tiefpass, der mit der Zeit dunkler wird
+        const k = 0.5 - 0.42 * t;
+        low += (Math.random() * 2 - 1 - low) * k;
+        data[i] = low * Math.pow(1 - t, 3) * (i < ctx.sampleRate * 0.012 ? 0 : 1);
+      }
+    }
+    return buf;
   }
 
   toggleMute(): boolean {
@@ -54,7 +99,7 @@ class Sfx {
     if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
     gain.gain.setValueAtTime(vol, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    osc.connect(gain).connect(this.master);
+    osc.connect(gain).connect(this.out);
     osc.start(t);
     osc.stop(t + dur + 0.02);
   }
@@ -70,7 +115,7 @@ class Sfx {
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(vol, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    src.connect(filter).connect(gain).connect(this.master);
+    src.connect(filter).connect(gain).connect(this.out);
     src.start(t, Math.random() * 1.5);
     src.stop(t + dur + 0.02);
   }
@@ -236,28 +281,41 @@ class Sfx {
 
   // ---- Schwimmen
 
-  /** Langer Pfiff des Kampfrichters mit Vibrato */
+  /** Langer Pfiff des Kampfrichters: Vibrato und das Schnarren der Kugel in der Pfeife */
   whistle(): void {
     if (!this.ctx || !this.master) return;
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     const lfo = this.ctx.createOscillator();
     const depth = this.ctx.createGain();
+    const trill = this.ctx.createOscillator();
+    const trillDepth = this.ctx.createGain();
+    const trem = this.ctx.createGain();
+    const soft = this.ctx.createBiquadFilter();
     const gain = this.ctx.createGain();
     osc.type = 'square';
     osc.frequency.value = 2800;
     lfo.frequency.value = 28;
     depth.gain.value = 90;
     lfo.connect(depth).connect(osc.frequency);
+    // Schnarren: Lautstärke flattert schnell
+    trill.type = 'triangle';
+    trill.frequency.value = 34;
+    trem.gain.value = 0.7;
+    trillDepth.gain.value = 0.3;
+    trill.connect(trillDepth).connect(trem.gain);
+    // Obertöne etwas zähmen, damit der Pfiff nicht sticht
+    soft.type = 'lowpass';
+    soft.frequency.value = 4200;
     gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(0.06, t + 0.04);
-    gain.gain.setValueAtTime(0.06, t + 0.7);
+    gain.gain.exponentialRampToValueAtTime(0.07, t + 0.04);
+    gain.gain.setValueAtTime(0.07, t + 0.7);
     gain.gain.exponentialRampToValueAtTime(0.001, t + 0.85);
-    osc.connect(gain).connect(this.master);
-    osc.start(t);
-    lfo.start(t);
-    osc.stop(t + 0.9);
-    lfo.stop(t + 0.9);
+    osc.connect(soft).connect(trem).connect(gain).connect(this.out);
+    for (const o of [osc, lfo, trill]) {
+      o.start(t);
+      o.stop(t + 0.9);
+    }
   }
 
   /** Elektronisches Startsignal */
@@ -273,7 +331,9 @@ class Sfx {
 
   /** Leiser Wasserschlag eines Armzugs, links und rechts leicht verschieden */
   stroke(side: 'L' | 'R'): void {
-    this.burst(0.07, 0.14, side === 'L' ? 1500 : 1800, 'bandpass');
+    this.burst(0.07, 0.13, side === 'L' ? 1500 : 1800, 'bandpass');
+    // Weiches „Plopp“ der eintauchenden Hand
+    this.tone(side === 'L' ? 240 : 270, 0.05, 'triangle', 0.05, 140);
   }
 
   /** Husten nach dem Verschlucken */
@@ -297,7 +357,7 @@ class Sfx {
     gain.gain.setValueAtTime(0.02, t);
     gain.gain.linearRampToValueAtTime(0.16, t + 0.25);
     gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
-    src.connect(filter).connect(gain).connect(this.master);
+    src.connect(filter).connect(gain).connect(this.out);
     src.start(t, Math.random() * 1.5);
     src.stop(t + 0.4);
   }
@@ -339,7 +399,7 @@ class Sfx {
       band.Q.value = 0.6;
       this.crowdGain = this.ctx.createGain();
       this.crowdGain.gain.value = 0;
-      this.crowdSource.connect(band).connect(this.crowdGain).connect(this.master);
+      this.crowdSource.connect(band).connect(this.crowdGain).connect(this.out);
       this.crowdSource.start();
     }
     this.crowdGain!.gain.setTargetAtTime(level * 0.12, this.ctx.currentTime, 0.3);

@@ -400,15 +400,17 @@ function quad(g: Gfx, x0: number, y0: number, x1: number, y1: number, w0: number
   const len = Math.hypot(x1 - x0, y1 - y0) || 1;
   const nx = -(y1 - y0) / len;
   const ny = (x1 - x0) / len;
-  g.fillPoints(
-    [
-      { x: x0 + (nx * w0) / 2, y: y0 + (ny * w0) / 2 },
-      { x: x1 + (nx * w1) / 2, y: y1 + (ny * w1) / 2 },
-      { x: x1 - (nx * w1) / 2, y: y1 - (ny * w1) / 2 },
-      { x: x0 - (nx * w0) / 2, y: y0 - (ny * w0) / 2 },
-    ],
-    true,
-  );
+  // Zwei Dreiecke statt fillPoints: spart die Triangulierung in jedem Bild
+  const ax = x0 + (nx * w0) / 2;
+  const ay = y0 + (ny * w0) / 2;
+  const bx = x1 + (nx * w1) / 2;
+  const by = y1 + (ny * w1) / 2;
+  const cx = x1 - (nx * w1) / 2;
+  const cy = y1 - (ny * w1) / 2;
+  const dx = x0 - (nx * w0) / 2;
+  const dy = y0 - (ny * w0) / 2;
+  g.fillTriangle(ax, ay, bx, by, cx, cy);
+  g.fillTriangle(ax, ay, cx, cy, dx, dy);
 }
 
 /** Unterwasserfarben: Teile unterhalb von `y` werden zu `color` hin gemischt. */
@@ -416,6 +418,16 @@ export interface WaterTint {
   y: number;
   color: number;
   amount: number;
+  /** Brechung: Tiefe unter `y` wird mit diesem Faktor gestaucht (Teile wirken flacher) */
+  squash?: number;
+}
+
+/** Staucht die Lage eines Teils unter der Oberfläche (Lichtbrechung) */
+function refract(p: Piece, w: WaterTint): Piece {
+  const k = w.squash;
+  if (k === undefined) return p;
+  const f = (y: number) => (y > w.y ? w.y + (y - w.y) * k : y);
+  return p.kind === 'dot' ? { ...p, y: f(p.y) } : { ...p, y0: f(p.y0), y1: f(p.y1) };
 }
 
 /** Mischt zwei Farben, t = 0 → a, t = 1 → b */
@@ -436,7 +448,8 @@ function pieceY(p: Piece): number {
  * Erst alle Konturen, dann alle Füllungen – so entstehen saubere Gelenke.
  * Mit `water` erscheinen Teile unter der Oberfläche blasser und bläulich.
  */
-export function drawPieces(g: Gfx, pieces: Piece[], water?: WaterTint): void {
+export function drawPieces(g: Gfx, list: Piece[], water?: WaterTint): void {
+  const pieces = water?.squash !== undefined ? list.map((p) => refract(p, water)) : list;
   const wet = (p: Piece) => water !== undefined && pieceY(p) > water.y;
   const outlineWet = water ? mixColor(COLORS.outline, water.color, water.amount * 0.8) : COLORS.outline;
   for (const p of pieces) {
@@ -779,7 +792,7 @@ function drawFigure(g: Gfx, hx: number, hy: number, pose: Pose, look: RunnerLook
   // Schwimmer: barfuß, ohne Schweißbänder und Startnummer
   const swim = opts.cap !== undefined;
   const water: WaterTint | undefined =
-    opts.waterY !== undefined && !opts.rotation ? { y: opts.waterY, color: WATER_TINT, amount: 0.7 } : undefined;
+    opts.waterY !== undefined && !opts.rotation ? { y: opts.waterY, color: WATER_TINT, amount: 0.3, squash: 0.5 } : undefined;
   const pieces = (list: Piece[]) => drawPieces(g, list, water);
   const ux = Math.sin(pose.lean);
   const uy = -Math.cos(pose.lean);

@@ -11,6 +11,8 @@ export interface EventInfo {
   controls: [string, string][];
   bestLabel: string;
   lowerIsBetter: boolean;
+  /** Kulisse der Siegerehrung (Standard: Stadion) */
+  venue?: 'stadium' | 'hall';
   format: (value: number) => string;
 }
 
@@ -71,6 +73,7 @@ export const EVENTS: readonly EventInfo[] = [
     key: 'swim',
     name: '100 M FREISTIL',
     scene: 'swim',
+    venue: 'hall',
     controls: [
       ['PFEIL LINKS/RECHTS', 'IM TAKT TIPPEN = KRAULEN'],
       ['PFEIL HOCH', 'ATMEN, BEVOR DIE LUFT AUSGEHT'],
