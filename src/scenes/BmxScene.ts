@@ -2,15 +2,15 @@ import Phaser from 'phaser';
 import { sfx } from '../audio/sfx';
 import { COLORS, FONT, GAME_WIDTH, PX_PER_M, skewAt } from '../config';
 import { COUNTRIES, countryByCode, type Country } from '../data/countries';
-import { getCompetition } from '../data/session';
+import { currentDifficulty, getCompetition } from '../data/session';
 import { loadLookSeed } from '../data/storage';
 import { Beach } from '../gfx/beach';
 import { drawBmx, drawCrash, type RiderStance } from '../gfx/bike';
 import { BmxHud } from '../gfx/bmxHud';
 import { createLook, type Mood, type RunnerLook } from '../gfx/runner';
 import {
-  BMX_CPU_PROFILES,
   BmxCpu,
+  bmxCpuProfiles,
   COURSE,
   createRider,
   groundHeight,
@@ -166,7 +166,8 @@ export class BmxScene extends Phaser.Scene {
 
   private setupRiders(): void {
     const others = Phaser.Utils.Array.Shuffle(COUNTRIES.filter((_, i) => i !== this.countryIndex));
-    const profiles = Phaser.Utils.Array.Shuffle([...BMX_CPU_PROFILES]);
+    const list = bmxCpuProfiles(currentDifficulty());
+    const profiles = Phaser.Utils.Array.Shuffle([...list]);
     // Im Wettkampf tritt immer dasselbe Feld an
     const field = getCompetition()?.field;
     const cpuField = field?.filter((f) => !f.isPlayer);
@@ -178,7 +179,7 @@ export class BmxScene extends Phaser.Scene {
       const seed = entry ? entry.lookSeed : isPlayer ? loadLookSeed() : Math.floor(Math.random() * 1e9);
       const look = createLook(country, seed, lane + 1);
       const state = createRider();
-      const profile = entry?.profile != null ? BMX_CPU_PROFILES[entry.profile] : profiles[cpuIndex];
+      const profile = entry?.profile != null ? list[entry.profile] : profiles[cpuIndex];
       const cpu = isPlayer ? null : new BmxCpu(state, profile, Math.random);
       if (!isPlayer) cpuIndex++;
       const rider: Rider = {

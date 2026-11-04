@@ -2,6 +2,7 @@
 // Medaillen je Disziplin und Medaillenspiegel der Nationen.
 
 import type { EventKey } from '../data/events';
+import { DEFAULT_DIFFICULTY, type Difficulty } from './difficulty';
 
 export const COMPETITION = {
   opponents: 3, // + Spieler = 4, wie in allen Disziplinen
@@ -17,7 +18,7 @@ const MEDALS: readonly Medal[] = ['gold', 'silver', 'bronze'];
 export interface FieldEntry {
   code: string;
   isPlayer: boolean;
-  /** Index in den `*_CPU_PROFILES` (Rookie/Profi/Champion), null = Spieler */
+  /** Index in die Gegnerliste der Stufe (`xxxCpuProfiles`: Rookie/Profi/Champion), null = Spieler */
   profile: 0 | 1 | 2 | null;
   lookSeed: number;
 }
@@ -35,6 +36,8 @@ export interface CompetitionState {
   /** Nächste/aktuelle Disziplin in COMPETITION_ORDER */
   index: number;
   results: Partial<Record<EventKey, Placing[]>>;
+  /** Gegnerstärke – beim Start festgeschrieben und bis zur Abschlussfeier gültig */
+  difficulty: Difficulty;
 }
 
 export interface MedalRow {
@@ -53,6 +56,7 @@ export function createCompetition(
   pool: readonly string[],
   rng: () => number,
   playerLook: number,
+  difficulty: Difficulty = DEFAULT_DIFFICULTY,
 ): CompetitionState {
   const shuffle = <T,>(list: T[]): T[] => {
     for (let i = list.length - 1; i > 0; i--) {
@@ -68,7 +72,7 @@ export function createCompetition(
   for (let i = 0; i < COMPETITION.opponents; i++) {
     field.push({ code: others[i], isPlayer: false, profile: profiles[i], lookSeed: Math.floor(rng() * 1e9) });
   }
-  return { field, index: 0, results: {} };
+  return { field, index: 0, results: {}, difficulty };
 }
 
 /** null = alle Disziplinen gespielt */

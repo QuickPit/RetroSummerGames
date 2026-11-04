@@ -3,6 +3,7 @@
 // der fünf Kampfrichter. Ohne Phaser, damit sie testbar ist.
 
 import { createRng, gaussian } from './cpu';
+import { cpuField, cpuJitter, formFactor, type CpuSkill, type Difficulty } from './difficulty';
 import type { Side } from './hurdles';
 
 export const DIVE = {
@@ -16,9 +17,11 @@ export const DIVE = {
   /** Armschwung: fester Takt, erster Hochpunkt so lange nach dem ersten Tipp */
   swingPeriod: 1.0,
   swingFirstPeak: 0.25,
-  /** Schwung je gültigem Tipp; Gleichgewicht ≈ Tipprate × swingImpulse / swingDamping */
-  swingImpulse: 0.135,
-  swingDamping: 1.5,
+  /** Schwung je gültigem Tipp, gesättigt: raw += swingImpulse · (1 − raw / swingSaturation) */
+  swingImpulse: 0.21,
+  swingSaturation: 1.5,
+  /** Abklingen des Schwungs pro Sekunde – 6/s ≈ 82 %, 8/s ≈ 92 %, ab ~10/s voller Schwung */
+  swingDamping: 0.75,
   /** Zeitkonstante der Glättung in Sekunden */
   swingSmooth: 0.3,
   /** Ohne Leertaste springt der Springer so lange nach dem ersten Tipp von selbst */
@@ -380,7 +383,7 @@ export function swingTap(s: DiveState, side: Side, t = s.time): boolean {
     setPhase(s, 'swing');
     s.t0 = s.time;
   }
-  s.raw += DIVE.swingImpulse;
+  s.raw += DIVE.swingImpulse * Math.max(0, 1 - s.raw / DIVE.swingSaturation);
   return true;
 }
 
@@ -640,16 +643,41 @@ export interface DiveCpuProfile {
   dives: readonly DiveId[];
 }
 
+/** Sprunglisten je Stufe (Rookie/Profi/Champion): die 3 Sprünge mit dem besten Erwartungswert, nach SG */
+export const DIVE_CPU_DIVES: Record<Difficulty, readonly (readonly DiveId[])[]> = {
+  easy: [
+    ['15p', '25h', '15s2'],
+    ['25h', '25p', '15s2'],
+    ['25p', '15s2', '35h'],
+  ],
+  normal: [
+    ['25p', '15s2', '35h'],
+    ['25p', '15s2', '35h'],
+    ['15s2', '35h', '45h'],
+  ],
+  hard: [
+    ['25p', '15s2', '35h'],
+    ['15s2', '35h', '45h'],
+    ['15s2', '35h', '45h'],
+  ],
+};
+
+/** Turm-Profil aus Tipprate und Fehlerfaktor mit eigener Sprungliste */
+export function diveCpuProfile({ rate, error }: CpuSkill, name: string, dives: readonly DiveId[]): DiveCpuProfile {
+  return { name, tapRate: rate, tapJitter: cpuJitter(error), takeoffError: 0.08 * error, releaseError: 0.06 * error, dives };
+}
+
+/** Die drei Gegner einer Stufe (Rookie/Profi/Champion) */
+export function diveCpuProfiles(d: Difficulty): DiveCpuProfile[] {
+  return cpuField(d, (skill, name, i) => diveCpuProfile(skill, name, DIVE_CPU_DIVES[d][i]));
+}
+
 // Reihenfolge Rookie/Profi/Champion – wird in competition.test.ts geprüft!
-export const DIVE_CPU_PROFILES: readonly DiveCpuProfile[] = [
-  { name: 'Rookie', tapRate: 8.0, tapJitter: 0.2, takeoffError: 0.07, releaseError: 0.05, dives: ['15h', '25h', '15s2'] },
-  { name: 'Profi', tapRate: 9.6, tapJitter: 0.15, takeoffError: 0.05, releaseError: 0.038, dives: ['25p', '15s2', '35h'] },
-  { name: 'Champion', tapRate: 10.8, tapJitter: 0.1, takeoffError: 0.035, releaseError: 0.03, dives: ['15s2', '35h', '45h'] },
-];
+export const DIVE_CPU_PROFILES: readonly DiveCpuProfile[] = diveCpuProfiles('normal');
 
 /** Tipprate eines Gegners für einen Wettkampf – auch Computer haben gute und schlechte Tage. */
 export function cpuDiveRate(p: DiveCpuProfile, rng: () => number): number {
-  return p.tapRate * (0.95 + 0.1 * rng());
+  return p.tapRate * formFactor(rng);
 }
 
 /** Zielt beim Öffnen so viele Grad vor das Ziel – das Ausrichten erledigt den Rest */

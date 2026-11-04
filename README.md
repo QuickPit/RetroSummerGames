@@ -6,10 +6,20 @@ diesmal per Tastatur.
 
 **Spielen:** https://quickpit.github.io/RetroSummerGames/
 
-## Aktueller Stand (v0.9 – Einzelspieler)
+## Aktueller Stand (v0.10 – Einzelspieler)
 
 Sechs Disziplinen gegen drei Computer-Gegner (Rookie, Profi, Champion). Im Startbildschirm wählst du
-mit **↑ / ↓** die Zeile (Modus, Disziplin, Nation, Athlet) und änderst sie mit **← / →**.
+mit **↑ / ↓** die Zeile (Modus, Disziplin, Gegner, Nation, Athlet) und änderst sie mit **← / →**.
+
+### Schwierigkeitsgrad
+
+Menüzeile **GEGNER: LEICHT / NORMAL / SCHWER** (wird gemerkt, Standard NORMAL). Sie gilt für alle
+Disziplinen; im Wettkampf bleibt die Stufe vom Start bis zum Endstand fest.
+
+- **LEICHT** – zum Einsteigen: Mit etwa 6 Tipps/s sind Medaillen drin.
+- **NORMAL** – mit etwa 8 Tipps/s und ordentlichem Timing gibt es Podestplätze, der Champion bleibt ein harter Brocken.
+- **SCHWER** – Weltklasse: 10 Tipps/s und sauberes Timing; die Gegner laufen auch mal Weltrekord.
+- Schneller als ~11 Tipps/s zu hämmern bringt kaum noch Tempo – beim Schwimmen schadet es sogar.
 
 ### Wettkampf „Die Spiele“
 

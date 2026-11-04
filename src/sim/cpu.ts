@@ -1,3 +1,4 @@
+import { cpuField, cpuJitter, cpuReaction, formFactor, type CpuSkill, type Difficulty } from './difficulty';
 import { HURDLE_POSITIONS, PHYSICS, isAirborne, isFinished, jump, tap, type RunnerState, type Side } from './hurdles';
 
 export interface CpuProfile {
@@ -12,11 +13,18 @@ export interface CpuProfile {
   jumpError: number;
 }
 
-export const CPU_PROFILES: readonly CpuProfile[] = [
-  { name: 'Rookie', tapRate: 8.5, tapJitter: 0.25, reaction: 0.24, jumpError: 0.08 },
-  { name: 'Profi', tapRate: 10, tapJitter: 0.18, reaction: 0.19, jumpError: 0.055 },
-  { name: 'Champion', tapRate: 11.4, tapJitter: 0.12, reaction: 0.15, jumpError: 0.04 },
-];
+/** Hürden-Profil aus Tipprate und Fehlerfaktor */
+export function hurdleCpuProfile({ rate, error }: CpuSkill, name: string): CpuProfile {
+  return { name, tapRate: rate, tapJitter: cpuJitter(error), reaction: cpuReaction(error), jumpError: 0.06 * error };
+}
+
+/** Die drei Gegner einer Stufe (Rookie/Profi/Champion) */
+export function hurdleCpuProfiles(d: Difficulty): CpuProfile[] {
+  return cpuField(d, hurdleCpuProfile);
+}
+
+// Reihenfolge Rookie/Profi/Champion – wird in competition.test.ts geprüft!
+export const CPU_PROFILES: readonly CpuProfile[] = hurdleCpuProfiles('normal');
 
 /** Kleiner deterministischer Zufallsgenerator (mulberry32). */
 export function createRng(seed: number): () => number {
@@ -51,7 +59,7 @@ export class CpuController {
     private readonly rng: () => number,
   ) {
     // Jeder Lauf ist etwas anders – auch Computer haben gute und schlechte Tage.
-    this.rate = profile.tapRate * (0.95 + 0.1 * rng());
+    this.rate = profile.tapRate * formFactor(rng);
     this.nextTapAt = profile.reaction * (0.85 + 0.3 * rng());
   }
 

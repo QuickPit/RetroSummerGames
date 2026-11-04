@@ -2,6 +2,7 @@
 // gemessen), Atmen, Rollwende an der 50-m-Wand und Anschlag im Ziel.
 
 import { createRng, gaussian } from './cpu';
+import { cpuField, cpuJitter, cpuReaction, formFactor, type CpuSkill, type Difficulty } from './difficulty';
 import type { Side } from './hurdles';
 
 export const SWIM = {
@@ -13,8 +14,9 @@ export const SWIM = {
   diveSpeed: 3.0,
   /** Ohne Sprung springt der Schwimmer so lange nach dem Signal von selbst */
   autoDiveAfter: 3,
-  /** Tempozuwachs eines vollen Zugs in m/s */
-  strokeImpulse: 0.1,
+  /** Tempozuwachs eines vollen Zugs in m/s – gesättigt: × (1 − v / (strokeSaturation · maxSpeed)) */
+  strokeImpulse: 0.29,
+  strokeSaturation: 1.2,
   /** Wasserwiderstand: dv/dt = −(dragLinear·v + dragQuad·v²) */
   dragLinear: 0.2,
   dragQuad: 0.136,
@@ -44,7 +46,8 @@ export const SWIM = {
   breathTime: 0.4,
   breathSpeedFactor: 0.9,
   gaspSpeedFactor: 0.5,
-  gaspStun: 0.6,
+  /** Luftschnappen: so lange kein Vortrieb – Atmen bringt bei 10/s so etwa 4 s */
+  gaspStun: 0.9,
   /** Wende: Leertaste wirkt erst so nah an der Wand */
   turnZone: 3.0,
   /** Dauer der Rolle in Sekunden */
@@ -240,10 +243,15 @@ export function stroke(s: SwimmerState, side: Side, t: number): StrokeQuality | 
   }
 
   // Die Höchstgeschwindigkeit kappt nur den Zuwachs, nicht Tempo aus Sprung oder Abstoß
-  s.v = Math.max(s.v, Math.min(SWIM.maxSpeed, s.v + SWIM.strokeImpulse * factor));
+  s.v = Math.max(s.v, Math.min(SWIM.maxSpeed, s.v + strokeGain(s.v, factor)));
   // Ein halber Zug kostet auch nur einen Teil der Luft
   useAir(s, SWIM.airPerStroke * factor);
   return quality;
+}
+
+/** Tempozuwachs eines Zugs mit Wirkung `factor` beim Tempo v (gesättigt) */
+export function strokeGain(v: number, factor = 1): number {
+  return SWIM.strokeImpulse * factor * Math.max(0, 1 - v / (SWIM.strokeSaturation * SWIM.maxSpeed));
 }
 
 function useAir(s: SwimmerState, amount: number): void {
@@ -456,12 +464,25 @@ export interface SwimCpuProfile {
   breathAt: number;
 }
 
+/** Schwimm-Profil aus Tipprate und Fehlerfaktor */
+export function swimCpuProfile({ rate, error }: CpuSkill, name: string): SwimCpuProfile {
+  return {
+    name,
+    tapRate: rate,
+    tapJitter: cpuJitter(error),
+    reaction: cpuReaction(error),
+    turnError: 0.35 * error,
+    breathAt: 0.25,
+  };
+}
+
+/** Die drei Gegner einer Stufe (Rookie/Profi/Champion) */
+export function swimCpuProfiles(d: Difficulty): SwimCpuProfile[] {
+  return cpuField(d, swimCpuProfile);
+}
+
 // Reihenfolge Rookie/Profi/Champion – wird in competition.test.ts geprüft!
-export const SWIM_CPU_PROFILES: readonly SwimCpuProfile[] = [
-  { name: 'Rookie', tapRate: 8.0, tapJitter: 0.2, reaction: 0.26, turnError: 0.4, breathAt: 0.3 },
-  { name: 'Profi', tapRate: 9.0, tapJitter: 0.14, reaction: 0.2, turnError: 0.25, breathAt: 0.22 },
-  { name: 'Champion', tapRate: 9.9, tapJitter: 0.08, reaction: 0.16, turnError: 0.15, breathAt: 0.15 },
-];
+export const SWIM_CPU_PROFILES: readonly SwimCpuProfile[] = swimCpuProfiles('normal');
 
 /** Steuert einen Computer-Schwimmer über dieselben Eingaben wie ein Mensch. */
 export class SwimCpu {
@@ -477,7 +498,7 @@ export class SwimCpu {
     private readonly rng: () => number,
   ) {
     // Jeder Lauf ist etwas anders
-    this.rate = profile.tapRate * (0.95 + 0.1 * rng());
+    this.rate = profile.tapRate * formFactor(rng);
     this.reaction = profile.reaction * (0.85 + 0.3 * rng());
   }
 

@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { sfx } from '../audio/sfx';
 import { COLORS, GAME_WIDTH, PX_PER_M } from '../config';
 import { COUNTRIES, countryByCode, type Country } from '../data/countries';
-import { getCompetition } from '../data/session';
+import { currentDifficulty, getCompetition } from '../data/session';
 import { loadLookSeed } from '../data/storage';
 import {
   DIVER_SCALE,
@@ -44,12 +44,12 @@ import type { Side } from '../sim/hurdles';
 import {
   DIVE,
   DIVES,
-  DIVE_CPU_PROFILES,
   DIVE_TIPS,
   armLift,
   cpuDiveRate,
   createDive,
   createDiver,
+  diveCpuProfiles,
   diveById,
   diverTotal,
   judge,
@@ -349,7 +349,8 @@ export class DiveScene extends Phaser.Scene {
 
   private setupEntrants(): void {
     const others = Phaser.Utils.Array.Shuffle(COUNTRIES.filter((_, i) => i !== this.countryIndex));
-    const profiles = Phaser.Utils.Array.Shuffle([...DIVE_CPU_PROFILES]);
+    const list = diveCpuProfiles(currentDifficulty());
+    const profiles = Phaser.Utils.Array.Shuffle([...list]);
     const country = COUNTRIES[this.countryIndex];
     // Im Wettkampf tritt immer dasselbe Feld an
     const field = getCompetition()?.field;
@@ -358,7 +359,7 @@ export class DiveScene extends Phaser.Scene {
     const opponents = field
       ? field
           .filter((f) => !f.isPlayer)
-          .map((f) => ({ country: countryByCode(f.code), seed: f.lookSeed, profile: DIVE_CPU_PROFILES[f.profile ?? 0] }))
+          .map((f) => ({ country: countryByCode(f.code), seed: f.lookSeed, profile: list[f.profile ?? 0] }))
       : profiles.map((profile, i) => ({ country: others[i], seed: Math.floor(Math.random() * 1e9), profile }));
     const cpus: Entrant[] = opponents.map(({ country: c, seed: s, profile }, i) => ({
       country: c,

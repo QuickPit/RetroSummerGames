@@ -15,17 +15,19 @@ export const HURDLE_POSITIONS: readonly number[] = Array.from(
 );
 
 // Alle Stellschrauben für das Spielgefühl an einem Ort.
-// Gleichgewichtstempo am Boden ≈ Tipprate × tapImpulse / groundDrag.
+// Gleichgewicht am Boden: v/vmax ≈ sat · r / (r + sat · groundDrag / tapGain) bei r Tipps/s –
+// 8/s ≈ 90 % und 10/s ≈ 96 % des Höchsttempos (gilt auch für Weitsprung und Stab).
 export const PHYSICS = {
-  /** Geschwindigkeitszuwachs pro gültigem (abwechselndem) Tipp in m/s */
-  tapImpulse: 0.85,
+  /** Tempo-Kurve: Zuwachs je Tipp = tapGain · vmax · (1 − v / (tapSaturation · vmax)) */
+  tapGain: 0.19,
+  tapSaturation: 1.48,
   /** Abbremsung am Boden pro Sekunde (exponentiell) */
-  groundDrag: 0.95,
+  groundDrag: 0.7,
   /** Abbremsung in der Luft – dort kann man nicht beschleunigen */
   airDrag: 0.15,
   /** Abbremsung nach dem Zieleinlauf */
   finishDrag: 1.6,
-  maxSpeed: 11.3,
+  maxSpeed: 9.55,
   /** Flugzeit eines Sprungs in Sekunden */
   jumpDuration: 0.44,
   /** Maximale Fußhöhe im Sprung in Metern */
@@ -84,6 +86,20 @@ export function createRunner(): RunnerState {
   };
 }
 
+/**
+ * Gesättigte Tempo-Kurve: Ein Tipp bringt umso weniger, je näher man am Höchsttempo ist.
+ * `factor` schwächt den Tipp ab (z. B. beim Stolpern).
+ */
+export function tapSpeed(
+  v: number,
+  vmax: number,
+  factor = 1,
+  gain: number = PHYSICS.tapGain,
+  saturation: number = PHYSICS.tapSaturation,
+): number {
+  return Math.min(vmax, v + factor * gain * vmax * Math.max(0, 1 - v / (saturation * vmax)));
+}
+
 export function isAirborne(r: RunnerState): boolean {
   return r.air >= 0;
 }
@@ -113,7 +129,7 @@ export function tap(r: RunnerState, side: Side, time: number): boolean {
   if (r.firstTapTime === null) r.firstTapTime = time;
   if (isAirborne(r)) return false;
   const factor = r.stumble > 0 ? PHYSICS.stumbleImpulseFactor : 1;
-  r.v = Math.min(r.v + PHYSICS.tapImpulse * factor, PHYSICS.maxSpeed);
+  r.v = tapSpeed(r.v, PHYSICS.maxSpeed, factor);
   r.validTaps++;
   return true;
 }

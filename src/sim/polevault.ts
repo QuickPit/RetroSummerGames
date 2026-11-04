@@ -1,13 +1,17 @@
 // Reine Spiellogik für den Stabhochsprung: ein einzelner Sprung (Anlauf,
 // Einstich, Schwung, Loslassen, Flug) und der Wettkampf mit Lattenhöhen.
 
-import { PHYSICS, strideLength, type Side } from './hurdles';
+import { createRng, gaussian } from './cpu';
+import { cpuField, cpuJitter, type CpuSkill, type Difficulty } from './difficulty';
+import { PHYSICS, strideLength, tapSpeed, type Side } from './hurdles';
 
 export const VAULT = {
   /** Anlauflänge in Metern vor dem Einstichkasten */
   runup: 30,
   /** Höchsttempo mit Stab in m/s */
   maxSpeed: 9.6,
+  /** Zeitkonstante für das geglättete Anlauftempo, mit dem eingestochen wird */
+  speedSmooth: 0.25,
   /** Idealer Absprung: so weit vor dem Kasten wird eingestochen */
   takeoffIdeal: 4.0,
   /** Abweichung, ab der der Einstich gar nichts mehr taugt */
@@ -67,6 +71,8 @@ export interface VaultState {
   x: number;
   y: number;
   v: number;
+  /** Geglättetes Anlauftempo – wann zwischen zwei Tipps eingestochen wird, soll egal sein */
+  vAvg: number;
   bar: number;
   lastSide: Side | null;
   stride: number;
@@ -92,6 +98,7 @@ export function createVault(bar: number): VaultState {
     x: -VAULT.runup,
     y: 0,
     v: 0,
+    vAvg: 0,
     bar,
     lastSide: null,
     stride: 0,
@@ -116,7 +123,7 @@ export function vaultTap(s: VaultState, side: Side): boolean {
   if ((s.phase !== 'ready' && s.phase !== 'runup') || side === s.lastSide) return false;
   s.lastSide = side;
   s.phase = 'runup';
-  s.v = Math.min(s.v + PHYSICS.tapImpulse, VAULT.maxSpeed);
+  s.v = tapSpeed(s.v, VAULT.maxSpeed);
   return true;
 }
 
@@ -129,7 +136,7 @@ export function plant(s: VaultState): number | null {
   s.plantX = s.x;
   s.plantQuality = quality;
   // Bewegungsenergie wird in Höhe umgesetzt: h = v² / 2g
-  s.baseHeight = 1.3 + (efficiency * s.v * s.v) / (2 * VAULT.gravity);
+  s.baseHeight = 1.3 + (efficiency * s.vAvg * s.vAvg) / (2 * VAULT.gravity);
   s.grip = Math.max(3.0, s.baseHeight - 0.55);
   s.phase = 'vault';
   s.p = 0;
@@ -188,6 +195,7 @@ export function stepVault(s: VaultState, dt: number): VaultEvent[] {
   switch (s.phase) {
     case 'runup': {
       s.v *= Math.exp(-PHYSICS.groundDrag * dt);
+      s.vAvg += (s.v - s.vAvg) * (1 - Math.exp(-dt / VAULT.speedSmooth));
       s.x += s.v * dt;
       const before = Math.floor(s.stride * 2);
       s.stride += (s.v * dt) / strideLength(s.v);
@@ -258,23 +266,78 @@ export const HEIGHTS: readonly number[] = [
 
 export interface VaultCpuProfile {
   name: string;
-  /** Typische Sprunghöhe in Metern */
-  mean: number;
-  sigma: number;
+  /** Gültige Tipps pro Sekunde */
+  tapRate: number;
+  /** Relative Schwankung des Tipp-Abstands (gleichverteilt ±) */
+  tapJitter: number;
+  /** σ des Einstichs in Sekunden (mal Tempo = Meter) */
+  plantError: number;
+  /** σ des Loslassens in Sekunden */
+  releaseError: number;
   /** Einstiegshöhe */
   opening: number;
 }
 
-export const VAULT_CPU_PROFILES: readonly VaultCpuProfile[] = [
-  { name: 'Rookie', mean: 4.6, sigma: 0.2, opening: 4.0 },
-  { name: 'Profi', mean: 5.25, sigma: 0.17, opening: 4.6 },
-  { name: 'Champion', mean: 5.8, sigma: 0.14, opening: 5.0 },
-];
+/** Ein Computer-Sprung über dieselben Eingaben wie ein Mensch: anlaufen, einstechen, loslassen. */
+export function simulateCpuVault(p: VaultCpuProfile, rng: () => number, bar: number = HEIGHTS[0]): VaultState {
+  const s = createVault(bar);
+  const dt = 1 / 120;
+  const plantErr = gaussian(rng) * p.plantError;
+  const releaseAt = Math.max(VAULT.earliestRelease + 0.01, VAULT.releaseIdeal + (gaussian(rng) * p.releaseError) / VAULT.vaultDuration);
+  let t = 0;
+  let nextTap = 0;
+  let side: Side = 'L';
+  while (s.phase !== 'landed' && s.phase !== 'runthrough' && t < 20) {
+    t += dt;
+    while ((s.phase === 'ready' || s.phase === 'runup') && t >= nextTap) {
+      vaultTap(s, side);
+      side = side === 'L' ? 'R' : 'L';
+      nextTap += (1 + p.tapJitter * (2 * rng() - 1)) / p.tapRate;
+    }
+    if (s.phase === 'runup' && -s.x <= VAULT.takeoffIdeal + plantErr * s.v) plant(s);
+    if (s.phase === 'vault' && s.p >= releaseAt) release(s);
+    stepVault(s, dt);
+  }
+  return s;
+}
 
+/** Einstiegshöhe: Ø von 40 Probesprüngen minus 0,45 m, abgerundet auf eine Lattenhöhe */
+export function vaultOpening(p: VaultCpuProfile): number {
+  const rng = createRng(7);
+  let sum = 0;
+  for (let i = 0; i < 40; i++) sum += simulateCpuVault(p, rng).peak;
+  const target = sum / 40 - 0.45;
+  let opening = HEIGHTS[0];
+  for (const h of HEIGHTS) if (h <= target + 1e-6) opening = h;
+  return opening;
+}
+
+/** Stabhoch-Profil aus Tipprate und Fehlerfaktor (inklusive Einstiegshöhe) */
+export function vaultCpuProfile({ rate, error }: CpuSkill, name: string): VaultCpuProfile {
+  const p: VaultCpuProfile = {
+    name,
+    tapRate: rate,
+    tapJitter: cpuJitter(error),
+    plantError: 0.05 * error,
+    releaseError: 0.05 * error,
+    opening: HEIGHTS[0],
+  };
+  p.opening = vaultOpening(p);
+  return p;
+}
+
+/** Die drei Gegner einer Stufe (Rookie/Profi/Champion) */
+export function vaultCpuProfiles(d: Difficulty): VaultCpuProfile[] {
+  return cpuField(d, vaultCpuProfile);
+}
+
+// Reihenfolge Rookie/Profi/Champion – wird in competition.test.ts geprüft!
+// PURE: Das Spiel nutzt die Fabrik, so fallen die 120 Probesprünge beim Bauen weg
+export const VAULT_CPU_PROFILES: readonly VaultCpuProfile[] = /* @__PURE__ */ vaultCpuProfiles('normal');
+
+/** Ein Computer-Versuch – die Höhe hängt nicht von der Latte ab, also genau ein Sprung */
 export function cpuAttempt(profile: VaultCpuProfile, bar: number, rng: () => number): boolean {
-  const u = Math.max(rng(), 1e-9);
-  const n = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rng());
-  return profile.mean + n * profile.sigma >= bar + VAULT.clearance;
+  return isCleared(simulateCpuVault(profile, rng, bar));
 }
 
 export interface Vaulter {

@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { sfx } from '../audio/sfx';
 import { CAMERA_LEAD_X, COLORS, GAME_WIDTH, LANE_DEPTH, PX_PER_M, TRACK_FAR_Y, laneCenterY, skewAt } from '../config';
 import { COUNTRIES, countryByCode, type Country } from '../data/countries';
-import { getCompetition } from '../data/session';
+import { currentDifficulty, getCompetition } from '../data/session';
 import { loadLookSeed } from '../data/storage';
 import {
   carryPole,
@@ -25,12 +25,12 @@ import {
 import { Stadium } from '../gfx/stadium';
 import { VaultBoard, type BoardRow } from '../gfx/vaultBoard';
 import { VaultHud } from '../gfx/vaultHud';
+import { withForm } from '../sim/difficulty';
 import type { Side } from '../sim/hurdles';
 import {
   Competition,
   HEIGHTS,
   VAULT,
-  VAULT_CPU_PROFILES,
   bestHeightIndex,
   cpuAttempt,
   createVault,
@@ -41,6 +41,7 @@ import {
   release,
   stepVault,
   totalFails,
+  vaultCpuProfiles,
   vaultTap,
   type VaultCpuProfile,
   type VaultEvent,
@@ -141,7 +142,9 @@ export class PoleVaultScene extends Phaser.Scene {
 
   private setupEntrants(): void {
     const others = Phaser.Utils.Array.Shuffle(COUNTRIES.filter((_, i) => i !== this.countryIndex));
-    const profiles = Phaser.Utils.Array.Shuffle([...VAULT_CPU_PROFILES]);
+    // Je Teilnehmer einmal die Tagesform (die Einstiegshöhe bleibt)
+    const list = vaultCpuProfiles(currentDifficulty()).map((p) => withForm(p, Math.random));
+    const profiles = Phaser.Utils.Array.Shuffle([...list]);
     const country = COUNTRIES[this.countryIndex];
     // Im Wettkampf tritt immer dasselbe Feld an
     const field = getCompetition()?.field;
@@ -154,7 +157,7 @@ export class PoleVaultScene extends Phaser.Scene {
     const opponents = field
       ? field
           .filter((f) => !f.isPlayer)
-          .map((f) => ({ country: countryByCode(f.code), seed: f.lookSeed, profile: VAULT_CPU_PROFILES[f.profile ?? 0] }))
+          .map((f) => ({ country: countryByCode(f.code), seed: f.lookSeed, profile: list[f.profile ?? 0] }))
       : profiles.map((profile, i) => ({ country: others[i], seed: Math.floor(Math.random() * 1e9), profile }));
     const cpus: Entrant[] = opponents.map(({ country: c, seed, profile }, i) => ({
       country: c,

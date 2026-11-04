@@ -32,6 +32,7 @@ function fixed(): CompetitionState {
     ],
     index: 0,
     results: {},
+    difficulty: 'normal',
   };
 }
 
@@ -65,6 +66,14 @@ describe('Teilnehmerfeld', () => {
     const a = createCompetition('GER', POOL, createRng(42), 3);
     const b = createCompetition('GER', POOL, createRng(42), 3);
     expect(a).toEqual(b);
+  });
+
+  it('schreibt die Gegnerstärke beim Start fest (Standard NORMAL)', () => {
+    expect(createCompetition('GER', POOL, createRng(1), 1).difficulty).toBe('normal');
+    let s = createCompetition('GER', POOL, createRng(1), 1, 'hard');
+    expect(s.difficulty).toBe('hard');
+    for (const key of COMPETITION_ORDER) s = recordEvent(s, key, order('GER', 'AUT', 'FRA', 'ITA'));
+    expect(s.difficulty).toBe('hard');
   });
 
   it('beginnt mit der ersten Disziplin ohne Ergebnisse', () => {

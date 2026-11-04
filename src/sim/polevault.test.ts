@@ -11,7 +11,10 @@ import {
   createVaulter,
   plant,
   release,
+  simulateCpuVault,
   stepVault,
+  vaultCpuProfiles,
+  vaultOpening,
   vaultTap,
   type VaultState,
 } from './polevault';
@@ -48,9 +51,37 @@ describe('Sprung', () => {
     const s = vault(5.0, 10, VAULT.takeoffIdeal, VAULT.releaseIdeal);
     expect(s.plantQuality).toBeGreaterThan(0.9);
     expect(s.releaseQuality).toBeGreaterThan(0.9);
-    expect(s.peak).toBeGreaterThan(5.0);
-    expect(s.peak).toBeLessThan(6.0);
+    // 10/s mit perfektem Timing ergibt mit der Tempo-Kurve Ø 5,9 m
+    expect(s.peak).toBeGreaterThan(5.5);
+    expect(s.peak).toBeLessThan(6.2);
     expect(s.outcome).toBe('clear');
+  });
+
+  it('hängt beim Einstich nicht davon ab, wann zwischen zwei Tipps eingestochen wird', () => {
+    // Gleicher Ort, gleiches Timing – nur die Lage im Tipp-Takt ändert sich
+    const peaks = Array.from({ length: 10 }, (_, k) => {
+      const s = createVault(4.0);
+      let t = 0;
+      let nextTap = 0;
+      let side: 'L' | 'R' = 'L';
+      const plantAt = 2.8 + k * 0.01;
+      while (t < plantAt) {
+        t += DT / 10;
+        if (t >= nextTap) {
+          vaultTap(s, side);
+          side = side === 'L' ? 'R' : 'L';
+          nextTap += 0.1;
+        }
+        stepVault(s, DT / 10);
+      }
+      expect(s.phase).toBe('runup');
+      s.x = -VAULT.takeoffIdeal;
+      plant(s);
+      while (s.phase === 'vault' && s.p < VAULT.releaseIdeal) stepVault(s, DT);
+      release(s);
+      return s.peak;
+    });
+    expect(Math.max(...peaks) - Math.min(...peaks)).toBeLessThanOrEqual(0.1);
   });
 
   it('springt höher, je schneller angelaufen wird', () => {
@@ -139,6 +170,32 @@ describe('Wettkampf', () => {
     const c = new Competition([a, b]);
     expect(c.ranking()[0]).toBe(b);
     expect(bestHeightIndex(a)).toBe(0);
+  });
+
+  it('Computer-Sprünge laufen über die echte Sim, die Höhe hängt nicht von der Latte ab', () => {
+    const p = VAULT_CPU_PROFILES[1];
+    const low = simulateCpuVault(p, createRng(4), 3.8);
+    const high = simulateCpuVault(p, createRng(4), 6.0);
+    expect(low.peak).toBe(high.peak);
+    expect(low.phase).toBe('landed');
+    expect(cpuAttempt(p, low.peak - VAULT.clearance - 0.01, createRng(4))).toBe(true);
+    expect(cpuAttempt(p, low.peak - VAULT.clearance + 0.01, createRng(4))).toBe(false);
+  });
+
+  it('Einstiegshöhe: Ø von 40 Probesprüngen minus 0,45 m, abgerundet (NORMAL 4,20 / 4,60 / 5,00)', () => {
+    expect(vaultCpuProfiles('normal')).toEqual(VAULT_CPU_PROFILES);
+    expect(VAULT_CPU_PROFILES.map((p) => p.opening)).toEqual([4.2, 4.6, 5.0]);
+    for (const p of VAULT_CPU_PROFILES) {
+      const rng = createRng(7);
+      const mean = Array.from({ length: 40 }, () => simulateCpuVault(p, rng).peak).reduce((a, b) => a + b, 0) / 40;
+      const opening = vaultOpening(p);
+      expect(HEIGHTS).toContain(opening);
+      expect(opening).toBeLessThanOrEqual(mean - 0.45 + 1e-6);
+      const next = HEIGHTS[HEIGHTS.indexOf(opening) + 1];
+      expect(next).toBeGreaterThan(mean - 0.45);
+    }
+    // Nie unter der ersten Höhe
+    expect(vaultOpening({ ...VAULT_CPU_PROFILES[0], tapRate: 3 })).toBe(HEIGHTS[0]);
   });
 
   it('endet immer – auch nur mit Computer-Gegnern', () => {

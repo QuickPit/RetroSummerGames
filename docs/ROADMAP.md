@@ -40,10 +40,19 @@ Der `/sprint`-Ablauf nimmt immer den **obersten offenen** Punkt (`[ ]`), setzt i
   - [x] **RSG-01b Große Abschlussfeier** (v0.7.0) – animierte Feier für den Gesamtsieger (Podest der Nationen,
     Flaggen, Feuerwerk, jubelndes Publikum) statt des schlichten Endstands.
 
-- [ ] **RSG-02 Schwierigkeitsgrad**
+- [x] **RSG-02 Schwierigkeitsgrad** (v0.10.0, Spec `docs/design/schwierigkeit.md`)
   Menüzeile **GEGNER: LEICHT / NORMAL / SCHWER**, gespeichert in localStorage. Skaliert die Profile
   der Computer-Gegner aller Disziplinen. *Abnahme:* per Simulation belegt, dass ein ~8-Tipps/s-Spieler
   auf LEICHT Medaillenchancen hat und SCHWER Weltklasse verlangt.
+
+- [ ] **RSG-16 Gleichstand im Stabhochsprung**
+  Bei völligem Gleichstand (Höhe, Fehlversuche an der Höhe und insgesamt) entscheidet bisher die zufällige
+  Sprungreihenfolge (`Competition.ranking()` in `sim/polevault.ts`). Richtig wäre ein geteilter Platz
+  (beide bekommen die Medaille), wie beim Medaillenspiegel. Gefunden von QA in RSG-02.
+
+- [ ] **RSG-17 Eigene Tipprate anzeigen**
+  Nach dem Lauf „DEIN TEMPO: 8.2 TIPPS/S“ im Ergebnis zeigen – passend zur Stufen-Beschreibung im Menü
+  (LEICHT ab 6, NORMAL ca. 8, SCHWER 10 Tipps/s). Idee aus RSG-02.
 
 - [ ] **RSG-03 Pause-Menü**
   Esc während einer Disziplin pausiert (Simulation und Timer stehen) mit **WEITER / NEU STARTEN / MENÜ**.
@@ -118,7 +127,7 @@ Der `/sprint`-Ablauf nimmt immer den **obersten offenen** Punkt (`[ ]`), setzt i
 
 - [x] 110 m Hürden (v0.1) · Liebevollere Athleten (v0.2) · Stabhochsprung + Menü (v0.3) ·
   BMX am Strand (v0.4) · Weitsprung (v0.5) · Agenten-Team und automatischer Spieltest (v0.5.1) ·
-  Wettkampf mit Medaillenspiegel – RSG-01a (v0.6.0) · Abschlussfeier – RSG-01b (v0.7.0) · 100 m Freistil – RSG-06 (v0.8.0) · Turmspringen – RSG-09 (v0.9.0)
+  Wettkampf mit Medaillenspiegel – RSG-01a (v0.6.0) · Abschlussfeier – RSG-01b (v0.7.0) · 100 m Freistil – RSG-06 (v0.8.0) · Turmspringen – RSG-09 (v0.9.0) · Schwierigkeitsgrad – RSG-02 (v0.10.0)
 
 ## Offene Fragen an den Owner
 
