@@ -9,8 +9,8 @@ import { createLook, lerpPose, standPose, type Mood, type Pose, type RunnerLook 
 import { SwimHud } from '../gfx/swimHud';
 import {
   SWIMMER_HEAD_LEAD,
-  armCirclePose,
   blockCrouchPose,
+  blockIdlePose,
   divePose,
   drawDrops,
   drawFlipTurn,
@@ -120,6 +120,8 @@ export class SwimScene extends Phaser.Scene {
   private phaseTimer = 0;
   private setDelay = 0;
   private crouch = 0;
+  /** 1 = Warteroutine auf dem Block, 0 = still stehen (weich überblendet) */
+  private fidget = 1;
   private finishOrder = 0;
   private playerFinishedAt: number | null = null;
   private camPx = 0;
@@ -143,6 +145,7 @@ export class SwimScene extends Phaser.Scene {
     this.simTime = 0;
     this.phaseTimer = 0;
     this.crouch = 0;
+    this.fidget = 1;
     this.finishOrder = 0;
     this.playerFinishedAt = null;
     this.camBlend = 0;
@@ -326,6 +329,8 @@ export class SwimScene extends Phaser.Scene {
 
   private updateStartPhases(dt: number): void {
     this.phaseTimer += dt;
+    const fidgetTarget = this.phase === 'ready' ? 1 : 0;
+    this.fidget = Phaser.Math.Clamp(this.fidget + Math.sign(fidgetTarget - this.fidget) * dt * 2.5, 0, 1);
     switch (this.phase) {
       case 'block':
         if (this.phaseTimer > 1.6) {
@@ -686,11 +691,12 @@ export class SwimScene extends Phaser.Scene {
     let markerX = shoulderX;
 
     if (this.phase !== 'race' || s.phase === 'block') {
-      // Auf dem Block: Armkreisen, still stehen, dann Startposition
+      // Auf dem Block: Warteroutine, still stehen, dann Startposition
       const groundY = blockTopY(c.lane);
       const crouching = this.phase === 'race' ? 1 : this.crouch;
       const x = this.screenX(-0.3 * PX_PER_M - crouching * 4, groundY);
-      const stand = this.phase === 'ready' ? armCirclePose(t, c.look.seed) : standPose();
+      const calm = this.fidget * this.fidget * (3 - 2 * this.fidget);
+      const stand = calm > 0 ? lerpPose(standPose(), blockIdlePose(t, c.look.seed), calm) : standPose();
       const pose = crouching > 0 ? lerpPose(stand, blockCrouchPose(), crouching) : stand;
       drawSwimmerUpright(g, x, groundY, pose, c.look, { dir: 1, time: t });
       markerX = x;

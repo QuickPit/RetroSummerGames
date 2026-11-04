@@ -21,7 +21,7 @@ import { drawBmx } from '../gfx/bike';
 import { diverSwingPose, drawDiver } from '../gfx/diver';
 import { carryPole, createLook, drawRunner, drawShadow, handOffset, idlePose, type RunnerLook } from '../gfx/runner';
 import { Stadium } from '../gfx/stadium';
-import { armCirclePose, drawSwimmerUpright } from '../gfx/swimmer';
+import { blockIdlePose, drawSwimmerUpright } from '../gfx/swimmer';
 import { COMPETITION_ORDER, createCompetition } from '../sim/competition';
 
 const STRIPES = [0xf7d038, 0xf08a24, 0xe8442e, 0xc42f6e, 0x7a3fc4];
@@ -255,13 +255,13 @@ export class TitleScene extends Phaser.Scene {
       return;
     }
     if (key === 'swim') {
-      // Badekleidung auf dem Fliesenboden, die Arme kreisen
+      // Badekleidung auf dem Fliesenboden, Warteroutine wie auf dem Startblock
       g.fillStyle(COLORS.tileGrout, 1);
       g.fillRect(x - 25, y - 2, 52, 7);
       g.fillStyle(COLORS.tile, 1);
       for (let i = 0; i < 4; i++) g.fillRect(x - 24 + i * 13, y - 1, 12, 5);
       drawShadow(g, x, y, 0);
-      drawSwimmerUpright(g, x, y, armCirclePose(this.elapsed, this.look.seed), this.look, { dir: 1, time: this.elapsed });
+      drawSwimmerUpright(g, x, y, blockIdlePose(this.elapsed, this.look.seed), this.look, { dir: 1, time: this.elapsed });
       return;
     }
     drawShadow(g, x, y, 0);

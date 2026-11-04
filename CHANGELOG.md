@@ -3,6 +3,13 @@
 Was sich für Spieler ändert – neueste Version oben. Hier lässt sich auch ohne Rückfragen nachlesen,
 was das Agenten-Team umgesetzt und welche Entscheidungen es getroffen hat.
 
+## 0.9.1 – Ruhe auf dem Startblock
+
+- Fix: Die Schwimmer kreisten vor dem Start ununterbrochen mit den Armen – das sah aus wie Kraulen im Stehen.
+  Jetzt stehen sie ruhig auf dem Block, verlagern das Gewicht und schütteln ab und zu die Arme aus, lockern
+  die Schultern oder klatschen – jeder zu seiner Zeit. Gilt auch für die Vorschau im Menü.
+- Team: Der QA-Test sieht sich Animationen jetzt als Bildfolge an statt nur als Einzelbild.
+
 ## 0.9.0 – Turmspringen
 
 - Neue Disziplin Turmspringen vom 10-m-Turm in der Sprunghalle: Schwung holen durch Tippen, Absprung im Takt

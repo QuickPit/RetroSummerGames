@@ -8,6 +8,7 @@ import {
   drawPieces,
   drawRunner,
   drawSwimCap,
+  lerpPose,
   mixColor,
   seg,
   shade,
@@ -41,13 +42,111 @@ export interface SwimDrawOptions {
 
 // ------------------------------------------------------- Aufrechte Posen
 
-/** Auf dem Block: Arme kreisen zum Lockern */
-export function armCirclePose(time: number, seed: number): Pose {
-  const p = standPose();
-  const a = -(time * 6 + seed);
-  p.nearArm = { upper: a, lower: a - 0.15 };
-  p.farArm = { upper: a + Math.PI, lower: a + Math.PI - 0.15 };
+/** Gesten der Warteroutine auf dem Block */
+type BlockGesture = 'shake' | 'shoulders' | 'swing' | 'clap';
+const BLOCK_GESTURES: readonly BlockGesture[] = ['swing', 'shake', 'clap', 'shoulders', 'swing', 'clap'];
+/** Dauer der Gesten in Sekunden */
+const GESTURE_TIME: Record<BlockGesture, number> = { shake: 1.8, shoulders: 2.2, swing: 2.4, clap: 1.9 };
+
+function hash01(n: number): number {
+  const h = Math.sin(n * 12.9898 + 78.233) * 43758.5453;
+  return h - Math.floor(h);
+}
+
+/** Stützstellen [u, Wert], dazwischen weich interpoliert */
+function keyframes(u: number, keys: readonly (readonly [number, number])[]): number {
+  for (let i = 1; i < keys.length; i++) {
+    const [u1, v1] = keys[i];
+    if (u <= u1) {
+      const [u0, v0] = keys[i - 1];
+      return v0 + (v1 - v0) * smooth((u - u0) / (u1 - u0));
+    }
+  }
+  return keys[keys.length - 1][1];
+}
+
+const CLAP_UPPER = [[0, 0], [0.22, -0.55], [0.46, 1.35], [0.58, 0.75], [0.7, 1.35], [1, 0]] as const;
+const CLAP_BEND = [[0, 0], [0.22, -0.1], [0.46, 0.85], [0.58, 0.3], [0.7, 0.85], [1, 0]] as const;
+
+/** Gestenpose zum Zeitpunkt u (0..1) – Anfang und Ende entsprechen dem ruhigen Stand */
+function gesturePose(kind: BlockGesture, u: number, base: Pose): Pose {
+  const p: Pose = { ...base, nearArm: { ...base.nearArm }, farArm: { ...base.farArm }, nearLeg: { ...base.nearLeg }, farLeg: { ...base.farLeg } };
+  const bell = Math.sin(Math.PI * u);
+  switch (kind) {
+    case 'shake': {
+      // Arme locker hängen lassen und die Unterarme ausschütteln, Knie federn leicht
+      const out = smooth(u / 0.25) * smooth((1 - u) / 0.25);
+      const s = Math.sin(u * 26) * out;
+      p.nearArm = { upper: base.nearArm.upper + 0.3 * out + 0.12 * s, lower: base.nearArm.lower + 0.3 * out + 0.4 * s };
+      p.farArm = { upper: base.farArm.upper - 0.25 * out - 0.12 * s, lower: base.farArm.lower - 0.15 * out - 0.4 * s };
+      p.hip -= 0.6 * bell * (0.5 + 0.5 * Math.sin(u * 26 + 1));
+      p.nearLeg = { upper: base.nearLeg.upper + 0.06 * bell, lower: base.nearLeg.lower - 0.08 * bell };
+      p.farLeg = { upper: base.farLeg.upper + 0.05 * bell, lower: base.farLeg.lower - 0.08 * bell };
+      break;
+    }
+    case 'shoulders': {
+      // Schultern lockern: Arme pendeln zweimal ruhig vor und zurück, der Oberkörper geht mit
+      const swing = Math.sin(u * Math.PI * 4) * bell;
+      p.nearArm = { upper: base.nearArm.upper + 0.6 * swing, lower: base.nearArm.lower + 0.75 * swing + 0.15 * bell };
+      p.farArm = { upper: base.farArm.upper - 0.55 * swing, lower: base.farArm.lower - 0.5 * swing + 0.15 * bell };
+      p.lean = base.lean + 0.06 * swing;
+      break;
+    }
+    case 'swing': {
+      // Beide Arme gemeinsam langsam nach vorne-oben schwingen und wieder sinken lassen
+      const up = smooth(bell * 1.25);
+      p.nearArm = { upper: 0.05 + 2.0 * up, lower: 0.15 + 2.0 * up };
+      p.farArm = { upper: -0.05 + 1.95 * up, lower: 0.1 + 1.95 * up };
+      p.lean = base.lean - 0.06 * up;
+      p.hip += 1 * up;
+      break;
+    }
+    case 'clap': {
+      // Arme nach hinten ausholen, dann zweimal vor der Brust zusammenschlagen
+      const upper = keyframes(u, CLAP_UPPER);
+      const bend = keyframes(u, CLAP_BEND);
+      p.nearArm = { upper: base.nearArm.upper + upper, lower: base.nearArm.lower + upper + bend };
+      p.farArm = { upper: base.farArm.upper + upper * 0.92, lower: base.farArm.lower + upper * 0.92 + bend * 0.9 };
+      p.lean = base.lean + 0.04 * Math.max(0, upper);
+      break;
+    }
+  }
   return p;
+}
+
+/**
+ * Warteroutine auf dem Block: überwiegend ruhiges Stehen mit Atmen und Gewichtsverlagern,
+ * dazwischen je Schwimmer zeitversetzt eine kurze Geste (ausschütteln, Schultern lockern,
+ * Arme schwingen, klatschen).
+ */
+export function blockIdlePose(time: number, seed: number): Pose {
+  const p = standPose();
+  // Atmen: Oberkörper hebt sich minimal, Arme pendeln kaum merklich mit
+  const breath = Math.sin(time * 1.7 + seed);
+  p.lean += 0.025 * breath;
+  p.nearArm.upper += 0.03 * breath;
+  p.farArm.upper += 0.02 * breath;
+  // Gewicht langsam von einem Bein aufs andere, das entlastete Knie knickt etwas ein
+  const shift = Math.sin(time * 0.55 + seed * 0.7);
+  const relax = Math.max(0, shift);
+  const relaxFar = Math.max(0, -shift);
+  p.nearLeg = { upper: p.nearLeg.upper + 0.05 * shift + 0.1 * relax, lower: p.nearLeg.lower - 0.22 * relax };
+  p.farLeg = { upper: p.farLeg.upper + 0.05 * shift + 0.1 * relaxFar, lower: p.farLeg.lower - 0.22 * relaxFar };
+  p.hip -= 0.6 * Math.abs(shift);
+
+  // Gesten: je Schwimmer eigener Rhythmus und Versatz
+  const period = 5.5 + 3 * hash01(seed);
+  const local = time + period * hash01(seed + 17);
+  const cycle = Math.floor(local / period);
+  const r = hash01(seed * 0.73 + cycle * 3.91 + 0.5);
+  if (r < 0.1) return p; // manchmal einfach nur stehen
+  const pick = hash01(seed * 1.31 + cycle * 5.77 + 2.5);
+  const kind = BLOCK_GESTURES[Math.floor(pick * BLOCK_GESTURES.length) % BLOCK_GESTURES.length];
+  const start = period * (0.2 + 0.3 * r);
+  const u = (local - cycle * period - start) / GESTURE_TIME[kind];
+  if (u <= 0 || u >= 1) return p;
+  const blend = smooth(u / 0.15) * smooth((1 - u) / 0.15);
+  return lerpPose(p, gesturePose(kind, u, p), blend);
 }
 
 /** Startposition auf dem Block: tief gebeugt, Hände an der Blockkante */
