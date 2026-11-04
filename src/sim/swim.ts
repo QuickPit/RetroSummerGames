@@ -1,7 +1,7 @@
 // Reine Spiellogik für 100 m Freistil: Startsprung, Kraulen im Takt (je Arm
 // gemessen), Atmen, Rollwende an der 50-m-Wand und Anschlag im Ziel.
 
-import { createRng } from './cpu';
+import { createRng, gaussian } from './cpu';
 import type { Side } from './hurdles';
 
 export const SWIM = {
@@ -27,12 +27,16 @@ export const SWIM = {
   chokeCycle: 0.13,
   /** Wirkung eines Zugs knapp über `chokeCycle` */
   hastyFactor: 0.35,
-  chokeSpeedFactor: 0.85,
-  chokeAir: 0.1,
+  chokeSpeedFactor: 0.9,
+  chokeAir: 0.05,
   /** Husten: so lange kein Vortrieb */
-  chokeStun: 0.5,
-  /** Frühestens so lange nach dem letzten Verschlucken wieder (2 s statt 1,5 s: 18 Tipps/s sicher unter 90 s) */
-  chokeCooldown: 2.0,
+  chokeStun: 0.4,
+  /**
+   * Frühestens so lange nach dem letzten Verschlucken wieder. Mit den milderen Werten
+   * für Husten und Luftschnappen bleibt auch Hämmern ohne Atmen unter 90 s.
+   */
+  chokeCooldown: 2.5,
+  /** Luft je vollem Zug; hektische Züge kosten anteilig weniger */
   airPerStroke: 0.012,
   lowAir: 0.25,
   /** Atmen oberhalb dieser Luft zählt als „früh geatmet“ */
@@ -40,7 +44,7 @@ export const SWIM = {
   breathTime: 0.4,
   breathSpeedFactor: 0.9,
   gaspSpeedFactor: 0.5,
-  gaspStun: 0.8,
+  gaspStun: 0.6,
   /** Wende: Leertaste wirkt erst so nah an der Wand */
   turnZone: 3.0,
   /** Dauer der Rolle in Sekunden */
@@ -102,6 +106,8 @@ export interface SwimmerState {
   finishTime: number | null;
   /** Zeit seit Beginn der aktuellen Phase (für die Animation) */
   phaseTime: number;
+  /** Rennzeit am Ende des letzten Schritts – Eingaben dazwischen werden hochgerechnet */
+  time: number;
   /** Zeitpunkt des letzten gültigen Zugs (Animation) */
   lastStrokeAt: number;
   /** Zeit im Wasser beim Schwimmen (ohne Sprung und Wende) – für die Zugrate */
@@ -139,6 +145,7 @@ export function createSwimmer(): SwimmerState {
     turned: false,
     finishTime: null,
     phaseTime: 0,
+    time: 0,
     lastStrokeAt: -Infinity,
     swimTime: 0,
     strokes: 0,
@@ -210,8 +217,9 @@ export function stroke(s: SwimmerState, side: Side, t: number): StrokeQuality | 
   } else if (t - s.lastChokeAt >= SWIM.chokeCooldown) {
     quality = 'choke';
   } else {
+    // In der Sperrzeit: je kürzer der Armzyklus, desto weniger bringt der Zug – Hämmern lohnt nie
     quality = 'hasty';
-    factor = SWIM.hastyFactor;
+    factor = SWIM.hastyFactor * Math.max(0, cycle) / SWIM.chokeCycle;
   }
 
   const inTakt = cycle >= SWIM.inTaktCycle;
@@ -233,11 +241,14 @@ export function stroke(s: SwimmerState, side: Side, t: number): StrokeQuality | 
 
   // Die Höchstgeschwindigkeit kappt nur den Zuwachs, nicht Tempo aus Sprung oder Abstoß
   s.v = Math.max(s.v, Math.min(SWIM.maxSpeed, s.v + SWIM.strokeImpulse * factor));
-  useAir(s, SWIM.airPerStroke);
+  // Ein halber Zug kostet auch nur einen Teil der Luft
+  useAir(s, SWIM.airPerStroke * factor);
   return quality;
 }
 
 function useAir(s: SwimmerState, amount: number): void {
+  // Während des Atemzugs strömt Luft nach – kein Verbrauch, kein Luftschnappen
+  if (s.breathing > 0) return;
   s.air = Math.max(0, s.air - amount);
   if (s.air < SWIM.lowAir && !s.lowAirWarned) {
     s.lowAirWarned = true;
@@ -249,7 +260,6 @@ function useAir(s: SwimmerState, amount: number): void {
     s.v *= SWIM.gaspSpeedFactor;
     s.stun = SWIM.gaspStun;
     s.stunKind = 'gasp';
-    s.breathing = 0;
     refillAir(s);
     s.queued.push({ type: 'gasp' });
   }
@@ -258,6 +268,14 @@ function useAir(s: SwimmerState, amount: number): void {
 function refillAir(s: SwimmerState): void {
   s.air = 1;
   s.lowAirWarned = false;
+}
+
+/** Bricht Atemzug und Husten ab (Wende, Anschlag, Ziel); ein laufender Atemzug zählt als vollendet */
+function settleBreath(s: SwimmerState): void {
+  if (s.breathing > 0) refillAir(s);
+  s.breathing = 0;
+  s.stun = 0;
+  s.stunKind = null;
 }
 
 /** Atmen (↑): kostet Tempo, füllt nach `breathTime` die Luft. */
@@ -284,18 +302,21 @@ export function rateTurn(w: number, v: number): TurnRating {
   return w > idealTurnDistance(v) ? 'early' : 'late';
 }
 
-/** Rollwende (Leertaste). Wirkt nur auf der Hinbahn innerhalb der Wendezone. */
+/**
+ * Rollwende (Leertaste). Wirkt nur auf der Hinbahn innerhalb der Wendezone.
+ * Der Wandabstand wird vom letzten Schritt auf den Tastenzeitpunkt t hochgerechnet.
+ */
 export function flipTurn(s: SwimmerState, t: number): boolean {
   if (s.phase !== 'swim' || s.turned) return false;
-  const w = toWall(s);
+  const ahead = Math.min(toWall(s), s.v * Math.max(0, t - s.time));
+  const w = toWall(s) - ahead;
   if (w > SWIM.turnZone) return false;
+  s.d += ahead;
   s.turnQuality = turnQuality(w, s.v);
   s.turnRating = rateTurn(w, s.v);
   s.flipAt = t;
   s.flipSpeed = Math.max(s.v, SWIM.flipMinSpeed);
-  s.breathing = 0;
-  s.stun = 0;
-  s.stunKind = null;
+  settleBreath(s);
   setPhase(s, 'flip');
   s.queued.push({ type: 'turn', rating: s.turnRating });
   return true;
@@ -318,6 +339,7 @@ export function step(s: SwimmerState, dt: number, time: number): SwimEvent[] {
   const events: SwimEvent[] = s.queued;
   s.queued = [];
   s.phaseTime += dt;
+  s.time = time;
 
   if (s.phase === 'block') {
     if (time >= SWIM.autoDiveAfter) {
@@ -343,7 +365,9 @@ export function step(s: SwimmerState, dt: number, time: number): SwimEvent[] {
   }
 
   if (s.phase === 'flip') {
-    s.d = Math.min(SWIM.poolLength, s.d + s.flipSpeed * dt);
+    // Die Rolle beginnt erst beim Tastendruck, nicht am Schrittanfang
+    const from = Math.max(time - dt, s.flipAt!);
+    s.d = Math.min(SWIM.poolLength, s.d + s.flipSpeed * Math.max(0, time - from));
     s.v = s.flipSpeed;
     if (s.d >= SWIM.poolLength) {
       s.v = 0;
@@ -393,9 +417,7 @@ export function step(s: SwimmerState, dt: number, time: number): SwimEvent[] {
     s.flipAt = time - overshoot;
     s.turnRating = 'open';
     s.turnQuality = 0;
-    s.breathing = 0;
-    s.stun = 0;
-    s.stunKind = null;
+    settleBreath(s);
     setPhase(s, 'open');
     events.push({ type: 'turn', rating: 'open' });
     return events;
@@ -406,9 +428,7 @@ export function step(s: SwimmerState, dt: number, time: number): SwimEvent[] {
     const overshoot = s.v > 0 ? (s.d - SWIM.distance) / s.v : 0;
     s.finishTime = Math.max(0, time - overshoot);
     s.d = SWIM.distance;
-    s.breathing = 0;
-    s.stun = 0;
-    s.stunKind = null;
+    settleBreath(s);
     setPhase(s, 'done');
     events.push({ type: 'finish', time: s.finishTime });
   }
@@ -442,12 +462,6 @@ export const SWIM_CPU_PROFILES: readonly SwimCpuProfile[] = [
   { name: 'Profi', tapRate: 9.0, tapJitter: 0.14, reaction: 0.2, turnError: 0.25, breathAt: 0.22 },
   { name: 'Champion', tapRate: 9.9, tapJitter: 0.08, reaction: 0.16, turnError: 0.15, breathAt: 0.15 },
 ];
-
-function gaussian(rng: () => number): number {
-  const u = Math.max(rng(), 1e-9);
-  const v = rng();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-}
 
 /** Steuert einen Computer-Schwimmer über dieselben Eingaben wie ein Mensch. */
 export class SwimCpu {

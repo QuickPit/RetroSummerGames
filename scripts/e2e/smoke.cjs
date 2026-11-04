@@ -27,8 +27,6 @@ const DISCIPLINES = {
   swim: { scene: 'swim' },
   wettkampf: { competition: true },
 };
-/** Disziplinen im Wettkampf (COMPETITION_ORDER) */
-const EVENT_COUNT = 5;
 const BOT_OF_SCENE = { race: 'hurdles', polevault: 'pole', longjump: 'long', bmx: 'bmx', swim: 'swim' };
 
 // ---------------------------------------------------------------- Bot im Browser
@@ -391,7 +389,14 @@ async function runCompetition(browser) {
     await shot('1-intro');
 
     const order = [];
-    const room = () => page.evaluate(async () => (await import('/src/audio/sfx.ts')).sfx.room);
+    const room = () => page.evaluate(async () => (await import('/src/audio/sfx.ts')).sfx.currentRoom);
+    // Reihenfolge zur Laufzeit aus COMPETITION_ORDER (Szenennamen über das Register der Disziplinen)
+    const expectedOrder = await page.evaluate(async () => {
+      const { COMPETITION_ORDER } = await import('/src/sim/competition.ts');
+      const { eventByKey } = await import('/src/data/events.ts');
+      return COMPETITION_ORDER.map((key) => eventByKey(key).scene);
+    });
+    const EVENT_COUNT = expectedOrder.length;
     for (let i = 0; i < EVENT_COUNT; i++) {
       if (i === 1) {
         // Fall A: ENTER und ESC im selben Bild – es geht weiter, ohne Rückfrage und ohne Restszene
@@ -483,6 +488,18 @@ async function runCompetition(browser) {
         check(mid.paused && mid.t === t0 && mid.falseStarts === 0, `Schwimmen läuft während der Rückfrage weiter: ${JSON.stringify(mid)}`);
         check(t1 - t0 < 0.25, `Zeitsprung nach NEIN (Schwimmen): ${t0.toFixed(3)} → ${t1.toFixed(3)} s`);
         log.push(`Rückfrage beim Schwimmen: Zeit stand bei ${t0.toFixed(2)} s, danach ${t1.toFixed(2)} s`);
+        // Screenshots im Rennen und an der Wende
+        await page.waitForFunction(() => window.__game.scene.getScene('swim').simTime > 14, null, { timeout: 30_000 });
+        await shot(`${2 + i}-swim-race`);
+        await page.waitForFunction(
+          () => {
+            const p = window.__game.scene.getScene('swim').player.state;
+            return p.phase === 'flip' || p.phase === 'wall' || p.phase === 'open' || p.turned;
+          },
+          null,
+          { timeout: 60_000, polling: 16 },
+        );
+        await shot(`${2 + i}-swim-turn`);
       }
       const r = await botRun;
       for (const line of r.log) log.push(`${bot}: ${line}`);
@@ -546,7 +563,8 @@ async function runCompetition(browser) {
         log.push('Rückfrage: ESC öffnet sie, N setzt fort (auch bei ESC+ENTER im selben Bild)');
       }
     }
-    check(order.join(',') === 'race,longjump,polevault,swim,bmx', `Falsche Reihenfolge: ${order.join(',')}`);
+    check(order.join(',') === expectedOrder.join(','), `Falsche Reihenfolge: ${order.join(',')} statt ${expectedOrder.join(',')}`);
+    check(order.join(',') === 'race,longjump,polevault,swim,bmx', `Reihenfolge weicht von der Spec ab: ${order.join(',')}`);
     log.push(`Reihenfolge: ${order.join(' → ')}`);
 
     const final = await page.evaluate(() => {

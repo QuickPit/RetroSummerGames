@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { COLORS, FONT, GAME_WIDTH, LANE_COUNT, LANE_DEPTH, PX_PER_M, TRACK_FAR_Y, TRACK_NEAR_Y, laneCenterY, skewAt } from '../config';
 import { createRng } from '../sim/cpu';
 import { SWIM } from '../sim/swim';
+import { fillQuad } from './runner';
 import { canvasTexture, drawCrowdRows } from './textures';
 
 // Schwimmhalle als Kulisse für 100 m Freistil – alles per Canvas bzw. Graphics gemalt.
@@ -28,6 +29,8 @@ export const HALL = {
   markAt: 15,
 } as const;
 
+/** Nummernschild am Block nach dem Anschlag: Gold, Silber, Bronze */
+const PLACE_PLATE = [COLORS.gold, COLORS.silver, COLORS.bronze];
 const WATER_FRAMES = 4;
 const css = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
@@ -378,7 +381,6 @@ export class SwimHall {
   private readonly clockGfx: Gfx;
   private readonly clockText: Phaser.GameObjects.Text;
   private readonly laneLabels: Phaser.GameObjects.Text[] = [];
-  private readonly placeLabels: Phaser.GameObjects.Text[] = [];
   /** Anschlag im Ziel je Bahn: Platz und Zeitpunkt */
   private readonly touches: ({ place: number; at: number } | null)[] = [];
   private waterTimer = 0;
@@ -420,12 +422,6 @@ export class SwimHall {
     for (let lane = 0; lane < LANE_COUNT; lane++) {
       this.lanes.push(scene.add.graphics().setDepth(lane * 10 + 2));
       this.laneLabels.push(scene.add.text(0, 0, String(lane + 1), style).setOrigin(0.5).setDepth(lane * 10 + 3));
-      this.placeLabels.push(
-        scene.add
-          .text(0, 0, '', { ...style, color: '#f7d038', stroke: '#10101c', strokeThickness: 3 })
-          .setOrigin(0.5)
-          .setDepth(lane * 10 + 3),
-      );
       this.touches.push(null);
     }
     this.front = scene.add.graphics().setDepth(46);
@@ -444,7 +440,7 @@ export class SwimHall {
     const all: Phaser.GameObjects.Components.Depth[] = [
       this.wall, this.stands, this.boards, this.deck, this.water, this.edge, this.glitter, this.recordGfx,
       this.recordLabel, this.front, this.clockGfx, this.clockText,
-      ...this.stripes, ...this.ends, ...this.ropes, ...this.lanes, ...this.laneLabels, ...this.placeLabels,
+      ...this.stripes, ...this.ends, ...this.ropes, ...this.lanes, ...this.laneLabels,
     ];
     for (const o of all) o.setDepth(-100 + (o.depth + 20) / 100);
     return this;
@@ -519,15 +515,7 @@ export class SwimHall {
 
   /** Viereck quer über die Bahnen zwischen zwei Positionen (Meter) und zwei Bildschirmzeilen */
   private band(g: Gfx, m0: number, m1: number, y0: number, y1: number): void {
-    g.fillPoints(
-      [
-        new Phaser.Math.Vector2(this.sx(m0, y0), y0),
-        new Phaser.Math.Vector2(this.sx(m1, y0), y0),
-        new Phaser.Math.Vector2(this.sx(m1, y1), y1),
-        new Phaser.Math.Vector2(this.sx(m0, y1), y1),
-      ],
-      true,
-    );
+    fillQuad(g, this.sx(m0, y0), y0, this.sx(m1, y0), y0, this.sx(m1, y1), y1, this.sx(m0, y1), y1);
   }
 
   private drawClock(clock: number, dt: number): void {
@@ -606,7 +594,7 @@ export class SwimHall {
     const topY = blockTopY(lane);
     const front = this.sx(0, base);
     const label = this.laneLabels[lane];
-    const place = this.placeLabels[lane];
+    const touched = this.touches[lane];
     const startVisible = front > -30 && front < GAME_WIDTH + 30;
     if (!startVisible) {
       label.setVisible(false);
@@ -625,8 +613,16 @@ export class SwimHall {
       g.fillRect(x, topY, HALL.blockWidth, 3);
       g.fillStyle(0x7cc6f0, 1);
       g.fillRect(x, topY, HALL.blockWidth, 1);
-      g.fillStyle(0xffffff, 1);
+      // Nummernschild: Bahnnummer, nach dem Anschlag der Platz in Medaillenfarbe
+      const plate = touched === null ? 0xffffff : (PLACE_PLATE[touched.place - 1] ?? 0xffffff);
+      if (touched !== null) {
+        g.fillStyle(COLORS.outline, 1);
+        g.fillRect(x + 2, topY + 4, 10, 11);
+      }
+      g.fillStyle(plate, 1);
       g.fillRect(x + 3, topY + 5, 8, 9);
+      const text = String(touched === null ? lane + 1 : touched.place);
+      if (label.text !== text) label.setText(text);
       label.setVisible(true).setPosition(x + 7, topY + 10);
       // Haltegriff für den Rückenstart
       g.fillStyle(0xc9d1d9, 1);
@@ -636,7 +632,6 @@ export class SwimHall {
     // Anschlagplatten an beiden Wänden (nur wenn im Bild)
     const farY = TRACK_FAR_Y + lane * LANE_DEPTH + 5;
     const nearY = farY + LANE_DEPTH - 9;
-    const touched = this.touches[lane];
     const flash = touched !== null && time - touched.at < 0.8 && Math.floor((time - touched.at) * 10) % 2 === 0;
     for (const m of [0, SWIM.poolLength]) {
       const x = this.sx(m, nearY);
@@ -646,11 +641,6 @@ export class SwimHall {
       this.band(g, m, m + inward * 0.14, farY - 1, nearY + 1);
       g.fillStyle(m === 0 && flash ? 0xffffff : COLORS.yellow, 1);
       this.band(g, m, m + inward * 0.09, farY, nearY);
-    }
-    if (touched !== null && startVisible) {
-      place.setVisible(true).setText(String(touched.place)).setPosition(this.sx(-0.3, topY - 8), topY - 8);
-    } else {
-      place.setVisible(false);
     }
   }
 

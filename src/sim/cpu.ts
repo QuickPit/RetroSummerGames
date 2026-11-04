@@ -30,7 +30,7 @@ export function createRng(seed: number): () => number {
   };
 }
 
-function gaussian(rng: () => number): number {
+export function gaussian(rng: () => number): number {
   const u = Math.max(rng(), 1e-9);
   const v = rng();
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);

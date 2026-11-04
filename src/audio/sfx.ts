@@ -55,6 +55,11 @@ class Sfx {
     return this.bus ?? this.master!;
   }
 
+  /** Aktueller Raumklang (z. B. für den Spieltest) */
+  get currentRoom(): Room {
+    return this.room;
+  }
+
   /** Raumklang: in der Schwimmhalle hallt alles nach */
   setRoom(room: Room): void {
     this.room = room;

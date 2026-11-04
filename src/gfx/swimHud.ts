@@ -100,8 +100,12 @@ export class SwimHud {
 
   update(now: number, raceTime: number, swimmers: SwimHudSwimmer[], input: SwimHudInput): void {
     const p = swimmers.find((s) => s.isPlayer)!.state;
-    this.timeText.setText((p.finishTime ?? Math.max(0, raceTime)).toFixed(2));
-    this.actionText.setText(input.actionLabel).setColor(input.actionLit ? '#ffffff' : '#9aa0b8');
+    // Texte nur bei Änderung neu setzen – jedes setText/setColor zeichnet die Textur neu
+    const time = (p.finishTime ?? Math.max(0, raceTime)).toFixed(2);
+    if (this.timeText.text !== time) this.timeText.setText(time);
+    if (this.actionText.text !== input.actionLabel) this.actionText.setText(input.actionLabel);
+    const actionColor = input.actionLit ? '#ffffff' : '#9aa0b8';
+    if (this.actionText.style.color !== actionColor) this.actionText.setColor(actionColor);
 
     const g = this.g;
     g.clear();

@@ -1,4 +1,4 @@
-import type Phaser from 'phaser';
+import Phaser from 'phaser';
 import { COLORS, HAIR_COLORS, SKIN_TONES } from '../config';
 import type { Country } from '../data/countries';
 import { createRng } from '../sim/cpu';
@@ -409,21 +409,62 @@ export function dot(x: number, y: number, r: number, color: number, outline = tr
   return { kind: 'dot', x, y, r, color, outline };
 }
 
+/** Wiederverwendete Eckpunkte für fillPoints im Canvas-Renderer (keine Allokation pro Bild) */
+const QUAD_PTS = [
+  { x: 0, y: 0 },
+  { x: 0, y: 0 },
+  { x: 0, y: 0 },
+  { x: 0, y: 0 },
+];
+
+/**
+ * Füllt ein konvexes Viereck a-b-c-d ohne Allokation. WebGL: zwei Dreiecke (spart die
+ * Triangulierung in jedem Bild). Canvas glättet jede Dreieckskante – dort ergäbe das eine
+ * dunkle Naht an der Diagonale, deshalb ein einziger Pfad über wiederverwendete Punkte.
+ */
+export function fillQuad(
+  g: Gfx,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number,
+  dx: number,
+  dy: number,
+): void {
+  if (g.scene.sys.game.config.renderType === Phaser.CANVAS) {
+    const [a, b, c, d] = QUAD_PTS;
+    a.x = ax;
+    a.y = ay;
+    b.x = bx;
+    b.y = by;
+    c.x = cx;
+    c.y = cy;
+    d.x = dx;
+    d.y = dy;
+    g.fillPoints(QUAD_PTS, true);
+    return;
+  }
+  g.fillTriangle(ax, ay, bx, by, cx, cy);
+  g.fillTriangle(ax, ay, cx, cy, dx, dy);
+}
+
 function quad(g: Gfx, x0: number, y0: number, x1: number, y1: number, w0: number, w1: number): void {
   const len = Math.hypot(x1 - x0, y1 - y0) || 1;
   const nx = -(y1 - y0) / len;
   const ny = (x1 - x0) / len;
-  // Zwei Dreiecke statt fillPoints: spart die Triangulierung in jedem Bild
-  const ax = x0 + (nx * w0) / 2;
-  const ay = y0 + (ny * w0) / 2;
-  const bx = x1 + (nx * w1) / 2;
-  const by = y1 + (ny * w1) / 2;
-  const cx = x1 - (nx * w1) / 2;
-  const cy = y1 - (ny * w1) / 2;
-  const dx = x0 - (nx * w0) / 2;
-  const dy = y0 - (ny * w0) / 2;
-  g.fillTriangle(ax, ay, bx, by, cx, cy);
-  g.fillTriangle(ax, ay, cx, cy, dx, dy);
+  fillQuad(
+    g,
+    x0 + (nx * w0) / 2,
+    y0 + (ny * w0) / 2,
+    x1 + (nx * w1) / 2,
+    y1 + (ny * w1) / 2,
+    x1 - (nx * w1) / 2,
+    y1 - (ny * w1) / 2,
+    x0 - (nx * w0) / 2,
+    y0 - (ny * w0) / 2,
+  );
 }
 
 /** Unterwasserfarben: Teile unterhalb von `y` werden zu `color` hin gemischt. */

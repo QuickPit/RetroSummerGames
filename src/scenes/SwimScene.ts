@@ -60,6 +60,8 @@ const CAMERA_MAX_PX = 54 * PX_PER_M - GAME_WIDTH;
 const STROKE_ANIM = 0.12;
 /** Ohne Zug taucht der Schwimmer nach dieser Zeit wieder auf */
 const GLIDE_MAX = 2;
+/** Ab so vielen hektischen Zügen in Folge erscheint die Warnung (gelbe TAKT-Kästchen) */
+const HASTY_WARN = 3;
 /** Hinweis auf die Wende so weit vor der Wand */
 const TURN_HINT_AT = 8;
 /** Kopf bis Fußspitze eines Schwimmers in Pixeln */
@@ -124,6 +126,8 @@ export class SwimScene extends Phaser.Scene {
   private resultsShown = false;
   /** Bis dahin bleibt eine Meldung stehen, danach erscheinen wieder Hinweise */
   private messageUntil = 0;
+  /** Hektische Züge in Folge – Warnung, bevor das Verschlucken kommt */
+  private hastyRun = 0;
 
   constructor() {
     super('swim');
@@ -142,6 +146,7 @@ export class SwimScene extends Phaser.Scene {
     this.falseStarts = 0;
     this.resultsShown = false;
     this.messageUntil = 0;
+    this.hastyRun = 0;
     this.competitors = [];
   }
 
@@ -240,6 +245,11 @@ export class SwimScene extends Phaser.Scene {
           if (!competition) this.scene.restart({ countryIndex: this.countryIndex });
           return;
         }
+        // Vor dem Signal gedrückt, aber erst jetzt verarbeitet: Fehlstart statt Reaktion 0.00
+        if ((side || isAction) && ev.timeStamp > 0 && ev.timeStamp < this.gunAt) {
+          this.falseStart();
+          return;
+        }
         const s = this.player.state;
         const t = this.raceTimeAt(ev.timeStamp);
         if (side) {
@@ -282,11 +292,29 @@ export class SwimScene extends Phaser.Scene {
   }
 
   private falseStart(): void {
+    // Kam der Fehlstart erst nach dem Signal an, sind die Gegner womöglich schon losgesprungen
+    if (this.phase === 'race') this.resetField();
     this.phase = 'falseStart';
     this.phaseTimer = 0;
     this.falseStarts++;
     this.hud.setMessage('FEHLSTART!', 'NICHT VOR DEM SIGNAL SPRINGEN', '#e8442e');
     sfx.falseStart();
+  }
+
+  /** Alle zurück auf den Block (gleiches Feld, gleiche Profile) */
+  private resetField(): void {
+    this.simTime = 0;
+    this.finishOrder = 0;
+    this.hastyRun = 0;
+    for (const c of this.competitors) {
+      Object.assign(c.state, createSwimmer());
+      if (c.cpu) c.cpu = new SwimCpu(c.state, c.cpu.profile, Math.random);
+      c.place = null;
+      c.glideFrom = 0;
+      c.drops.length = 0;
+      c.rings.length = 0;
+      c.crowns.length = 0;
+    }
   }
 
   private updateStartPhases(dt: number): void {
@@ -341,6 +369,7 @@ export class SwimScene extends Phaser.Scene {
     let hint = '';
     if (s.phase === 'block' && this.simTime > 1) hint = 'LEERTASTE = SPRINGEN!';
     else if (s.phase === 'swim' && s.air < SWIM.lowAir) hint = 'LUFT HOLEN: PFEIL HOCH!';
+    else if (s.phase === 'swim' && this.hastyRun >= HASTY_WARN) hint = 'ZU SCHNELL – RUHIGER IM TAKT TIPPEN';
     else if (s.phase === 'swim' && !s.turned && toWall(s) <= TURN_HINT_AT) hint = 'WENDE: LEERTASTE KURZ VOR DER WAND';
     this.hud.setMessage('', hint);
   }
@@ -385,6 +414,7 @@ export class SwimScene extends Phaser.Scene {
         if (p) {
           sfx.stroke(e.side);
           this.hud.registerStroke(e.quality, e.inTakt);
+          this.hastyRun = e.inTakt ? 0 : this.hastyRun + 1;
         }
         break;
       case 'choke':
@@ -557,7 +587,8 @@ export class SwimScene extends Phaser.Scene {
       this.phase !== 'race' ? 0.1 : this.playerFinishedAt !== null ? 1 : Phaser.Math.Clamp(1 - remaining / 60, 0.3, 0.9);
     // Weltrekord-Linie im Tempo von 46.50 s
     const wr = (raceTime / SWIM.worldRecord) * SWIM.distance;
-    const wrOn = this.phase === 'race' && raceTime > 0 && wr <= SWIM.distance;
+    // Nach dem eigenen Anschlag aus – das Schild würde sonst die Zielmeldung überdecken
+    const wrOn = this.phase === 'race' && raceTime > 0 && wr <= SWIM.distance && this.playerFinishedAt === null;
     this.hall.setRecordLine(wrOn ? (wr <= SWIM.poolLength ? wr : SWIM.distance - wr) : null);
     this.hall.update(this.camPx, dt, this.elapsed, excitement, p.finishTime ?? raceTime);
 
@@ -591,9 +622,9 @@ export class SwimScene extends Phaser.Scene {
     return SWIM.poolLength * PX_PER_M - (BODY_PX + fromWall * (1 - BODY_PX / PUSH_BLEND_PX));
   }
 
-  /** Welt-X (Pixel) der Kopfspitze */
+  /** Welt-X (Pixel) der gezeichneten Kopfspitze – Spritzer sitzen dort, wo der Schwimmer zu sehen ist */
   private headWorldX(c: Competitor): number {
-    return poolX(c.state) * PX_PER_M;
+    return this.drawnHeadPx(c.state);
   }
 
   /** Tropfen am Handeintritt bzw. an der Wand */
@@ -669,8 +700,12 @@ export class SwimScene extends Phaser.Scene {
     } else if (s.phase === 'open') {
       drawSwimmer(g, shoulderX, waterY, 'touch', c.look, { dir, cycle: 0, kick: t * 4, time: t });
     } else if (s.phase === 'done') {
-      this.drawFinished(c, shoulderX, waterY, raceTime);
-      markerY = waterY - 44;
+      // Marker über dem jubelnden bzw. an der Leine hängenden Schwimmer der eigenen Bahn
+      const upright = this.drawFinished(c, shoulderX, waterY, raceTime);
+      if (upright !== null) {
+        markerX = upright;
+        markerY = waterY - 50;
+      }
     } else {
       const kind: SwimKind =
         s.stunKind === 'choke'
@@ -705,15 +740,15 @@ export class SwimScene extends Phaser.Scene {
     }
   }
 
-  /** Nach dem Anschlag: Arm an der Wand, dann Jubel oder müde an der Leine */
-  private drawFinished(c: Competitor, shoulderX: number, waterY: number, raceTime: number): void {
+  /** Nach dem Anschlag: Arm an der Wand, dann Jubel oder müde an der Leine. Liefert das X der aufrechten Figur. */
+  private drawFinished(c: Competitor, shoulderX: number, waterY: number, raceTime: number): number | null {
     const g = c.gfx;
     const s = c.state;
     const t = this.elapsed;
     const since = raceTime - (s.finishTime ?? raceTime);
     if (since < 0.6) {
       drawSwimmer(g, shoulderX, waterY, 'touch', c.look, { dir: -1, cycle: 0, kick: t * 4, time: t });
-      return;
+      return null;
     }
     const medal = (c.place ?? 9) <= 3;
     const happy = c.place === 1 || (c.isPlayer && medal);
@@ -722,5 +757,6 @@ export class SwimScene extends Phaser.Scene {
     const x = this.screenX(0.7 * PX_PER_M, waterY);
     // Hüfte knapp unter der Wasserlinie
     drawSwimmerUpright(g, x, waterY + pose.hip + 4, pose, c.look, { dir: -1, mood, time: t, waterY });
+    return x;
   }
 }

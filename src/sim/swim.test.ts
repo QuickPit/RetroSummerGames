@@ -414,3 +414,72 @@ describe('Grenzfälle (QA)', () => {
     }
   });
 });
+
+describe('Fixrunde nach Review', () => {
+  it('schnappt mitten im Atemzug nicht nach Luft', () => {
+    const { s, t } = inWater();
+    s.air = 0.02;
+    expect(breathe(s)).toBe(true);
+    let now = t;
+    const sides = ['L', 'R', 'L', 'R'] as const;
+    for (const side of sides) {
+      stroke(s, side, now);
+      now = run(s, now, now + 0.08).t;
+    }
+    expect(s.strokes).toBe(4);
+    expect(s.gasps).toBe(0);
+    run(s, now, t + SWIM.breathTime + 2 * DT);
+    expect(s.breathing).toBe(0);
+    expect(s.air).toBe(1);
+  });
+
+  it('rechnet den Wandabstand auf den Zeitpunkt des Tastendrucks hoch', () => {
+    const { s, t } = inWater();
+    s.d = SWIM.poolLength - 1.4;
+    s.v = 2;
+    // Taste 0,25 s nach dem letzten Schritt: in Wahrheit nur noch 0,9 m vor der Wand = ideal
+    expect(flipTurn(s, t + 0.25)).toBe(true);
+    expect(s.turnRating).toBe('perfect');
+    expect(s.d).toBeCloseTo(SWIM.poolLength - 0.9, 5);
+    // Die Rolle beginnt beim Tastendruck: an der Wand genau nach der Rollzeit
+    const { events } = run(s, t, t + 0.25 + SWIM.flipTime + 2 * DT);
+    expect(events.map((e) => e.type)).toEqual(expect.arrayContaining(['wall', 'push']));
+    expect(s.v).toBeGreaterThan(SWIM.turnPushMax - 0.05);
+  });
+
+  it('wertet einen bei der Wende laufenden Atemzug als vollendet', () => {
+    const { s, t } = inWater();
+    s.d = SWIM.poolLength - 1;
+    s.v = 2;
+    s.air = 0.2;
+    breathe(s);
+    expect(flipTurn(s, t)).toBe(true);
+    expect(s.breathing).toBe(0);
+    expect(s.air).toBe(1);
+  });
+
+  it('bringt in der Sperrzeit umso weniger, je kürzer der Armzyklus', () => {
+    const { s, t } = inWater();
+    stroke(s, 'L', t);
+    stroke(s, 'R', t + 0.03);
+    expect(stroke(s, 'L', t + 0.06)).toBe('choke');
+    let now = run(s, t, t + SWIM.chokeStun + 0.05).t;
+    stroke(s, 'R', now);
+    now += 0.06;
+    stroke(s, 'L', now);
+    s.v = 1;
+    // Armzyklus 0,12 s innerhalb der Sperrzeit: anteilig weniger als ein hektischer Zug an der Grenze
+    expect(stroke(s, 'R', now + 0.06)).toBe('hasty');
+    const short = s.v - 1;
+    expect(short).toBeGreaterThan(0);
+    expect(short).toBeCloseTo((SWIM.strokeImpulse * SWIM.hastyFactor * 0.12) / SWIM.chokeCycle, 5);
+  });
+
+  it('bleibt auch beim Hämmern ohne Atmen unter 90 s', () => {
+    for (const p of [model(15, 0.12, { breathAt: -1 }), model(18, 0.12, { breathAt: -1 }), model(25, 0, { breathAt: -1 })]) {
+      expect(average(p, 40, 500).max).toBeLessThan(90);
+    }
+    // Atmen lohnt sich trotzdem deutlich
+    expect(average(model(10, 0.12, { breathAt: -1 }), 40, 7).avg).toBeGreaterThan(average(model(10, 0.12), 40, 7).avg + 3);
+  });
+});
