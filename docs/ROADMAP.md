@@ -62,7 +62,7 @@ Der `/sprint`-Ablauf nimmt immer den **obersten offenen** Punkt (`[ ]`), setzt i
 
 ### Priorität 2 – Mehr Spiel
 
-- [ ] **RSG-06 Disziplin 100 m Freistil (Schwimmen)**
+- [x] **RSG-06 Disziplin 100 m Freistil (Schwimmen)** (v0.8.0)
   Rhythmus statt Hämmern: Armzüge im Takt tippen, zu schnell = Verschlucken, Atmen mit ↑.
   Vier Bahnen, Startsprung mit Leertaste, Wende entfällt (50-m-Becken ×2 mit Wende-Timing als Option).
   Neue Kulisse: Schwimmhalle.
@@ -91,6 +91,8 @@ Der `/sprint`-Ablauf nimmt immer den **obersten offenen** Punkt (`[ ]`), setzt i
   (Helfer `competitionOpponents(profiles)`); Esc/Rückfrage-Verdrahtung je Szene vereinheitlichen;
   Dialog-Bausteine (`drawConfirmBox`, `drawChoiceMarker`, `drawInfoBox`) von `gfx/medalHud.ts` nach
   `gfx/hud.ts` verschieben (für das Pause-Menü RSG-03). Publikumsgeräusch während der Rückfrage pausieren.
+  Aus RSG-06: Feld-Aufbau (Session-Feld, CPU-Index, Look-Seed, Profil) steht fast gleich in Race-, Bmx- und
+  SwimScene → Helfer `buildField(...)` in `data/session.ts`.
 
 - [ ] **RSG-15 Hilfekasten im Titel**
   Tasten- und Textspalte stehen fest (x126/x276): „LEERTASTE AM BRETT“ hat nur 6 px Luft, der
@@ -109,12 +111,14 @@ Der `/sprint`-Ablauf nimmt immer den **obersten offenen** Punkt (`[ ]`), setzt i
   (Graphics-Neuzeichnung pro Frame reduzieren, wo es viel kostet).
   Aus RSG-01b: Athleten der Abschlussfeier kosten ~5 ms/Bild – Posen sind periodisch, also je Athlet
   12–16 Phasenbilder als Spritesheet vorrendern.
+  Aus RSG-06: Hall-Faltung (Convolver) erst beim ersten `setRoom('hall')` anlegen statt beim ersten Tastendruck;
+  `drawPieces` mit `squash` klont pro Bild alle Körperteile.
 
 ## Erledigt
 
 - [x] 110 m Hürden (v0.1) · Liebevollere Athleten (v0.2) · Stabhochsprung + Menü (v0.3) ·
   BMX am Strand (v0.4) · Weitsprung (v0.5) · Agenten-Team und automatischer Spieltest (v0.5.1) ·
-  Wettkampf mit Medaillenspiegel – RSG-01a (v0.6.0) · Abschlussfeier – RSG-01b (v0.7.0)
+  Wettkampf mit Medaillenspiegel – RSG-01a (v0.6.0) · Abschlussfeier – RSG-01b (v0.7.0) · 100 m Freistil – RSG-06 (v0.8.0)
 
 ## Offene Fragen an den Owner
 

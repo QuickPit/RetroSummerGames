@@ -3,6 +3,22 @@
 Was sich für Spieler ändert – neueste Version oben. Hier lässt sich auch ohne Rückfragen nachlesen,
 was das Agenten-Team umgesetzt und welche Entscheidungen es getroffen hat.
 
+## 0.8.0 – 100 m Freistil
+
+- Neue Disziplin 100 m Freistil in einer eigenen Schwimmhalle: Startsprung mit Fehlstart-Regel, Kraulen im Takt
+  (←/→), Atmen mit ↑, Rollwende per Leertaste an der 50-m-Wand, Anschlag im Ziel, Weltrekord-Linie im Becken.
+- Rhythmus statt Hämmern: gleichmäßige ~10 Tipps/s sind am schnellsten; wer hektisch tippt, verschluckt sich.
+  Nach dem Rennen sagt das Spiel, wo Zeit verloren ging (Wende, Takt, Atmen, Reaktion).
+- Siegerehrung in der Halle mit Hall-Klang; der Wettkampf hat jetzt fünf Disziplinen (Schwimmen vor dem BMX-Finale),
+  der Medaillenspiegel fünf Spalten.
+- Hürden: Wer vor dem Startschuss drückt, macht einen Fehlstart – auch wenn das Bild erst kurz danach kommt
+  (vorher konnte das als Reaktion 0.00 durchgehen).
+- Fix: Bei Grafik ohne WebGL hatten die Athleten feine Nahtlinien an Armen und Beinen.
+- Entscheidungen des Teams:
+  - Die Wende ist schon in der ersten Version dabei – sie ist der Timing-Moment des Schwimmens.
+  - Hektisches Tippen kostet Tempo und Luft, aber jeder Durchgang bleibt unter 90 Sekunden, auch wenn man nie atmet.
+  - Fehlstarts werden gezählt, aber nicht disqualifiziert; ohne Startsprung springt der Schwimmer nach 3 s von selbst.
+
 ## 0.7.0 – Große Abschlussfeier
 
 - Nach dem Endstand des Wettkampfs geht es mit Enter zur Abschlussfeier: Nachtstadion mit Flutlicht und
