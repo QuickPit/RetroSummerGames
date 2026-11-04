@@ -318,6 +318,52 @@ describe('ceremonyPodium', () => {
     expect(ceremonyPodium(play(rows))).toEqual([{ rank: 1, codes: ['ITA'] }]);
   });
 
+  it('teilt Platz 3 zwischen zwei Nationen mit Bronze (1, 2, 3, 3)', () => {
+    const s = play(order('GER', 'AUT', 'FRA', 'ITA'), order('GER', 'AUT', 'ITA', 'FRA'));
+    expect(ceremonyPodium(s)).toEqual([
+      { rank: 1, codes: ['GER'] },
+      { rank: 2, codes: ['AUT'] },
+      { rank: 3, codes: ['FRA', 'ITA'] },
+    ]);
+  });
+
+  it('stellt drei punktgleiche Nationen gemeinsam auf Stufe 2', () => {
+    const s = play(order('GER', 'AUT', 'FRA', 'ITA'), order('GER', 'FRA', 'ITA', 'AUT'), order('GER', 'ITA', 'AUT', 'FRA'));
+    expect(ceremonyPodium(s)).toEqual([
+      { rank: 1, codes: ['GER'] },
+      { rank: 2, codes: ['AUT', 'FRA', 'ITA'] },
+    ]);
+  });
+
+  it('stellt bei vierfachem Gleichstand alle Nationen auf Stufe 1', () => {
+    const s = play(
+      order('GER', 'AUT', 'FRA', 'ITA'),
+      order('AUT', 'FRA', 'ITA', 'GER'),
+      order('FRA', 'ITA', 'GER', 'AUT'),
+      order('ITA', 'GER', 'AUT', 'FRA'),
+    );
+    expect(ceremonyPodium(s)).toEqual([{ rank: 1, codes: ['AUT', 'FRA', 'GER', 'ITA'] }]);
+    expect(ceremonyPodium(s)[0].codes).toEqual(overallWinners(s));
+  });
+
+  it('entspricht für zufällige Wettkämpfe immer den Rängen 1–3 mit Medaille', () => {
+    const rng = createRng(4711);
+    const codes = ['GER', 'AUT', 'FRA', 'ITA'];
+    for (let n = 0; n < 300; n++) {
+      const events = COMPETITION_ORDER.map(() =>
+        [...codes].sort(() => rng() - 0.5).map((code) => ({ code, valid: rng() > 0.2 })),
+      );
+      const s = play(...events);
+      const table = medalTable(s);
+      const podium = ceremonyPodium(s);
+      expect(podium.flatMap((p) => p.codes).sort()).toEqual(
+        table.filter((r) => r.rank <= 3 && r.total > 0).map((r) => r.code).sort(),
+      );
+      for (const p of podium) for (const code of p.codes) expect(table.find((r) => r.code === code)!.rank).toBe(p.rank);
+      expect(podium.find((p) => p.rank === 1)?.codes ?? []).toEqual(overallWinners(s));
+    }
+  });
+
   it('lässt Nationen auf Rang 3 ohne Medaille weg', () => {
     // GER Gold, AUT Silber, FRA und ITA ungültig: Rang 3 geteilt, aber ohne Medaille
     const rows = [...order('GER', 'AUT'), ...invalid('FRA', 'ITA')];

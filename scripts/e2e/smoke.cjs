@@ -483,7 +483,20 @@ async function runCompetition(browser) {
         const sc = window.__game.scene.getScene('ceremony');
         return { podium: sc.podium, children: sc.children.length, elapsed: sc.elapsed };
       });
+    // Gehaltenes ENTER (Auto-Repeat) darf die Feier nicht überspringen
+    await page.evaluate(() =>
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Enter', key: 'Enter', repeat: true, bubbles: true })),
+    );
     await page.waitForTimeout(1000);
+    check(await page.evaluate(() => window.__game.scene.isActive('ceremony')), 'Auto-Repeat-ENTER überspringt die Abschlussfeier');
+    const texts = await page.evaluate(() =>
+      window.__game.scene.getScene('ceremony').children.list.filter((o) => o.type === 'Text').map((t) => t.text),
+    );
+    check(!texts.some((t) => /[←→]/.test(t)), `Pfeil-Glyphen in der Feier: ${texts.join(' | ')}`);
+    check(
+      final.winners.length === 0 ? texts.includes('DIE SPIELE SIND BEENDET') : texts.some((t) => t.startsWith('GESAMTSIEGER: ')),
+      `Gesamtsieger-Zeile fehlt: ${texts.join(' | ')}`,
+    );
     const c1 = await ceremony();
     const expected = [];
     for (const r of final.table) {
