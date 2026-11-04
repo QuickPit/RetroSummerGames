@@ -1,3 +1,5 @@
+/// <reference types="vitest/config" />
+import { configDefaults } from 'vitest/config';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -8,4 +10,6 @@ export default defineConfig({
     target: 'es2022',
     chunkSizeWarningLimit: 2000,
   },
+  // Agenten-Worktrees unter .claude/ nicht mittesten
+  test: { exclude: [...configDefaults.exclude, '.claude/**'] },
 });
