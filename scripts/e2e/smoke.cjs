@@ -25,9 +25,10 @@ const DISCIPLINES = {
   long: { scene: 'longjump' },
   bmx: { scene: 'bmx' },
   swim: { scene: 'swim' },
+  dive: { scene: 'dive' },
   wettkampf: { competition: true },
 };
-const BOT_OF_SCENE = { race: 'hurdles', polevault: 'pole', longjump: 'long', bmx: 'bmx', swim: 'swim' };
+const BOT_OF_SCENE = { race: 'hurdles', polevault: 'pole', longjump: 'long', bmx: 'bmx', swim: 'swim', dive: 'dive' };
 
 // ---------------------------------------------------------------- Bot im Browser
 // Läuft per page.evaluate im Spiel. Liest den Zustand der Szene in jedem Takt
@@ -78,8 +79,18 @@ function botInPage(kind) {
     side ^= 1;
   };
 
+  // Bildschirmfotos an bestimmten Stellen: Node holt die Namen ab und fotografiert sofort
+  window.__shots = [];
+  const shotOnce = (name) => {
+    if (mem.shots.has(name)) return;
+    mem.shots.add(name);
+    window.__shots.push(name);
+  };
+  mem.shots = new Set();
+
   // Node setzt das Flag, wenn sein Zeitlimit greift – dann keine Tasten mehr schicken
   window.__botStop = false;
+  window.__botPause = false;
   return new Promise((resolve) => {
     const started = performance.now();
     const timer = setInterval(() => {
@@ -88,7 +99,8 @@ function botInPage(kind) {
         resolve({ ok: false, log: [...log, 'abgebrochen'] });
         return;
       }
-      if (active('confirm')) return;
+      // Während einer Rückfrage – oder wenn Node den Bot für eine Prüfung anhält – keine Tasten
+      if (active('confirm') || window.__botPause) return;
       if (active('result')) {
         clearInterval(timer);
         resolve(mem.failed ? { ok: false, log: [...log, `✗ ${mem.failed}`] } : { ok: true, log });
@@ -220,6 +232,126 @@ function botInPage(kind) {
           mem.turned = true;
           press('Space');
         }
+      } else if (kind === 'dive') {
+        const sc = game.scene.getScene('dive');
+        // Sprünge je Durchgang; Reihenfolge der Liste wie DIVES in sim/dive.ts
+        const WANT = ['25h', '15s2', '15p'];
+        const ORDER = ['kopf', '15h', '15p', '25h', '25p', '15s2', '35h', '45h'];
+        const SPIN = { tuck: 2.9, pike: 2.25, straight: 1.5 };
+        if (!mem.dive) mem.dive = { key: '', results: [], started: performance.now(), holding: false, twists: 0 };
+        const m = mem.dive;
+        // Jede Taste nur einmal je Zustand – die Szene verarbeitet sie erst im nächsten Bild
+        const once = (key, fn) => {
+          if (m.key === key) return;
+          m.key = key;
+          fn();
+        };
+        if (sc.finished) {
+          once('finished', () => {
+            const total = m.results.reduce((a, j) => a + j.points, 0);
+            const seconds = (performance.now() - m.started) / 1000;
+            log.push(`Gesamt: ${total.toFixed(2)} P nach ${seconds.toFixed(0)} s`);
+            if (m.results.length !== 3) mem.failed = `${m.results.length} statt 3 Sprünge gewertet`;
+            else if (m.results.some((j) => j.fail)) mem.failed = 'Fehlsprung in der Serie';
+            else if (total <= 120) mem.failed = `Summe ${total.toFixed(2)} nicht über 120`;
+            else if (seconds < 30 || seconds > 90) mem.failed = `Dauer ${seconds.toFixed(0)} s außerhalb 30–90 s`;
+          });
+          return;
+        }
+        const r = sc.round + 1;
+        if (sc.phase === 'board') {
+          m.selectAt = 0;
+          if (sc.waitingForPlayer) once(`board${r}`, () => press('Enter'));
+          return;
+        }
+        if (sc.phase === 'select') {
+          m.holding = false;
+          m.reheld = false;
+          m.twists = 0;
+          shotOnce(`${r}-1-select`);
+          // Kurz warten, damit das Panel fotografiert werden kann
+          const now = performance.now();
+          if (!m.selectAt) m.selectAt = now;
+          if (now - m.selectAt < 600) return;
+          // Je Tastendruck abwarten, bis die Szene die neue Zeile zeigt (sonst springt die Wahl zu weit);
+          // ENTER erst, wenn die gewünschte Zeile eine Weile stehen bleibt
+          const want = ORDER.indexOf(WANT[sc.round]);
+          if (sc.selection !== m.seenSel) {
+            m.seenSel = sc.selection;
+            m.seenAt = now;
+          }
+          if (sc.selection !== want) {
+            if (!m.pressAt || m.pressSel !== sc.selection || now - m.pressAt > 400) {
+              m.pressAt = now;
+              m.pressSel = sc.selection;
+              press('ArrowDown');
+            }
+          } else if (now - m.seenAt > 150) {
+            once(`go${r}`, () => press('Enter'));
+          }
+          return;
+        }
+        const s = sc.diver;
+        if (!s) return;
+        if (s.def.id !== WANT[sc.round] && !mem.failed) mem.failed = `Sprung ${r}: ${s.def.id} statt ${WANT[sc.round]} gewählt`;
+        if (sc.verdictReady) {
+          once(`done${r}`, () => {
+            const j = sc.judgement;
+            m.results.push(j);
+            log.push(
+              `Sprung ${r} ${j.dive}: ${j.rating}, Noten ${j.notes.map((n) => n.toFixed(1)).join(' ')} → ` +
+                `${j.sum.toFixed(1)} × ${j.dd} = ${j.points.toFixed(2)} P (Absprung ${Math.round(j.quality * 100)}%, ` +
+                `Schwung ${Math.round(j.swing * 100)}%, ${Math.round(j.delta)}°, Tipp ${j.tip})`,
+            );
+            // Erst die hochgezählte Wertung fotografieren, dann weiter
+            setTimeout(() => {
+              shotOnce(`${r}-5-verdict`);
+              setTimeout(() => press('Enter'), 1500);
+            }, 700);
+          });
+          return;
+        }
+        const t = sc.simTime;
+        if (s.phase === 'ready' || s.phase === 'swing') {
+          steadyTap(10);
+          if (s.phase === 'swing' && t - s.t0 >= 1.5) shotOnce(`${r}-2-swing`);
+          if (s.phase === 'swing' && !m.holding && t - s.t0 >= 2.5) {
+            const k = Math.max(0, Math.round((t - s.t0 - 0.25) / 1.0));
+            const toPeak = s.t0 + 0.25 + k - t;
+            if (Math.abs(toPeak) < 0.02) {
+              m.holding = true;
+              send('keydown', 'Space');
+            }
+          }
+        } else if (s.phase === 'air') {
+          const air = t - s.takeoffAt;
+          if (air > 0.5) shotOnce(`${r}-3-air`);
+          const target = s.def.somersaults * 360;
+          // Nach einer Rückfrage gilt die Leertaste als losgelassen – neu drücken, der Salto dreht weiter
+          if (m.holding && !s.held && !m.reheld) {
+            m.reheld = true;
+            send('keydown', 'Space');
+          }
+          if (m.holding && s.held) {
+            // Drehung bis jetzt vorausrechnen – der Zustand ist bis zu einem Bild alt
+            const rot = s.rot + s.power * SPIN[s.def.position] * 360 * Math.max(0, t - s.time);
+            if (rot >= target - 20) {
+              m.holding = false;
+              send('keyup', 'Space');
+            }
+          }
+          if (s.def.twists > 0) {
+            if (m.twists === 0 && air >= 0.12) {
+              m.twists = 1;
+              press('ArrowUp');
+            } else if (m.twists === 1 && s.twistsDone >= 1 && s.twistStart === null) {
+              m.twists = 2;
+              press('ArrowUp');
+            }
+          }
+        } else if (s.phase === 'water') {
+          shotOnce(`${r}-4-entry`);
+        }
       } else if (kind === 'bmx') {
         const sc = game.scene.getScene('bmx');
         if (sc.phase === 'ready') press('Enter');
@@ -301,17 +433,26 @@ async function runDiscipline(browser, kind) {
     window.__game.scene.getScene('title').scene.start(scene, { countryIndex: 0 });
   }, DISCIPLINES[kind].scene);
 
-  // Während der Bot spielt, regelmäßig Screenshots machen
+  // Während der Bot spielt, regelmäßig Screenshots machen – und sofort, wenn der Bot einen anfordert
   let shot = 1;
   const shooter = setInterval(() => {
     page.screenshot({ path: path.join(OUT, `${kind}-${shot++}.png`) }).catch(() => {});
   }, 4000);
+  let busy = false;
+  const requested = setInterval(async () => {
+    if (busy) return;
+    busy = true;
+    const names = await page.evaluate(() => (window.__shots || []).splice(0)).catch(() => []);
+    for (const name of names) await page.screenshot({ path: path.join(OUT, `${kind}-${name}.png`) }).catch(() => {});
+    busy = false;
+  }, 40);
   const started = Date.now();
   let result;
   try {
     result = await runBot(page, kind);
   } finally {
     clearInterval(shooter);
+    clearInterval(requested);
   }
   await page.waitForTimeout(1500);
   await page.screenshot({ path: path.join(OUT, `${kind}-result.png`) });
@@ -367,6 +508,72 @@ async function runCompetition(browser) {
       }
     }, [a, b]);
 
+  // Turmspringen: Rückfrage im Schwung (1. Sprung) und in der Luft mit gehaltener Leertaste (3. Sprung).
+  // Der Bot ruht währenddessen, damit er die Zustände nach NEIN nicht sofort verändert.
+  const diveState = () =>
+    page.evaluate(() => {
+      const sc = window.__game.scene.getScene('dive');
+      const s = sc.diver;
+      return {
+        time: s.time,
+        t0: s.t0,
+        phase: s.phase,
+        held: s.held,
+        openAt: s.openAt,
+        rot: s.rot,
+        sim: sc.simTime,
+        paused: window.__game.scene.isPaused('dive'),
+      };
+    });
+  const diveConfirm = async () => {
+    await page.evaluate(() => (window.__botPause = true));
+    await page.keyboard.press('Escape');
+    await waitActive('confirm');
+    const before = await diveState();
+    await page.waitForTimeout(1000);
+    const mid = await diveState();
+    await page.keyboard.press('KeyN');
+    await page.waitForFunction(() => !window.__game.scene.isPaused('dive') && !window.__game.scene.isActive('confirm'), null, {
+      timeout: 5_000,
+    });
+    await page.waitForTimeout(60);
+    const after = await diveState();
+    check(mid.paused && mid.time === before.time, `Turmspringen läuft während der Rückfrage weiter: ${JSON.stringify(mid)}`);
+    check(after.time - before.time < 0.25 && after.sim - after.time < 0.1, `Zeitsprung nach NEIN: ${JSON.stringify({ before, after })}`);
+    return { before, after };
+  };
+  const checkDiveConfirm = async (i) => {
+    await page.waitForFunction(
+      () => {
+        const sc = window.__game.scene.getScene('dive');
+        const s = sc.diver;
+        return sc.round === 0 && s && s.phase === 'swing' && s.time - s.t0 > 1;
+      },
+      null,
+      { timeout: 60_000, polling: 16 },
+    );
+    let { before, after } = await diveConfirm();
+    check(after.phase === 'swing' && after.t0 === before.t0, `Takt nach NEIN verschoben: ${JSON.stringify({ before, after })}`);
+    log.push(`Rückfrage im Schwung: Sim-Zeit ${before.time.toFixed(2)} → ${after.time.toFixed(2)} s, Takt unverändert`);
+    await page.evaluate(() => (window.__botPause = false));
+
+    await page.waitForFunction(
+      () => {
+        const sc = window.__game.scene.getScene('dive');
+        const s = sc.diver;
+        return sc.round === 2 && s && s.phase === 'air' && s.held && s.time - s.takeoffAt > 0.15;
+      },
+      null,
+      { timeout: 90_000, polling: 16 },
+    );
+    ({ before, after } = await diveConfirm());
+    check(before.held && !after.held && after.phase === 'air', `Gehaltene Leertaste nach NEIN: ${JSON.stringify({ before, after })}`);
+    check(Math.abs(after.openAt - before.time) < 0.02, `Öffnen nicht zum Zeitpunkt der Rückfrage: ${JSON.stringify({ before, after })}`);
+    await shot(`${2 + i}-dive-air`);
+    log.push(`Rückfrage in der Luft: losgelassen bei ${before.time.toFixed(2)} s (${Math.round(before.rot)}°), danach ${after.time.toFixed(2)} s`);
+    await page.evaluate(() => (window.__botPause = false));
+  };
+
   let ok = true;
   try {
     await page.goto(URL);
@@ -410,7 +617,7 @@ async function runCompetition(browser) {
         await page.keyboard.press('Enter');
       }
       await page.waitForFunction(
-        () => ['race', 'polevault', 'longjump', 'swim', 'bmx'].some((k) => window.__game.scene.isActive(k)),
+        () => ['race', 'polevault', 'longjump', 'swim', 'dive', 'bmx'].some((k) => window.__game.scene.isActive(k)),
         null,
         { timeout: 15_000 },
       );
@@ -501,6 +708,7 @@ async function runCompetition(browser) {
         );
         await shot(`${2 + i}-swim-turn`);
       }
+      if (scene === 'dive') await checkDiveConfirm(i);
       const r = await botRun;
       for (const line of r.log) log.push(`${bot}: ${line}`);
       check(r.ok, `Bot ${bot} hat die Siegerehrung nicht erreicht`);
@@ -517,7 +725,7 @@ async function runCompetition(browser) {
         const champ = pv.rows.find((row) => row.code === pv.champ);
         check(champ && champ.valid, `Champion ${pv.champ} ohne gültige Höhe`);
       }
-      if (scene === 'swim') check((await room()) === 'hall', 'Siegerehrung Schwimmen ohne Hallenklang');
+      if (scene === 'swim' || scene === 'dive') check((await room()) === 'hall', `Siegerehrung ${scene} ohne Hallenklang`);
       const mode = i < EVENT_COUNT - 1 ? 'between' : 'final';
       if (i === 0) {
         // Fall B: ENTER und ESC im selben Bild in der Siegerehrung
@@ -564,7 +772,7 @@ async function runCompetition(browser) {
       }
     }
     check(order.join(',') === expectedOrder.join(','), `Falsche Reihenfolge: ${order.join(',')} statt ${expectedOrder.join(',')}`);
-    check(order.join(',') === 'race,longjump,polevault,swim,bmx', `Reihenfolge weicht von der Spec ab: ${order.join(',')}`);
+    check(order.join(',') === 'race,longjump,polevault,swim,dive,bmx', `Reihenfolge weicht von der Spec ab: ${order.join(',')}`);
     log.push(`Reihenfolge: ${order.join(' → ')}`);
 
     const final = await page.evaluate(() => {

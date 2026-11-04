@@ -73,8 +73,12 @@ export interface DrawOptions {
   helmet?: number;
   /** Farbe einer Badekappe: Schwimmbrille, barfuß, ohne Startnummer */
   cap?: number;
+  /** Barfuß im Badeanzug, aber ohne Kappe (Turmspringer) */
+  barefoot?: boolean;
   /** Wasseroberfläche (Bildschirm-Y, nur ohne Drehung): Teile darunter liegen im Wasser */
   waterY?: number;
+  /** Gestreckte Fußspitzen (Turmspringer in der Luft) */
+  pointToes?: boolean;
 }
 
 /** Farbe, zu der Körperteile unter Wasser hin gemischt werden */
@@ -102,6 +106,11 @@ export function createLook(country: Country, seed: number, number: number): Runn
     number,
     seed: Math.floor(rng() * 1000),
   };
+}
+
+/** Kampfrichter: Blazer, weiße Hose, dunkle Schuhe, kein Stirnband (Weitsprung, Turmspringen) */
+export function judgeLook(base: RunnerLook): RunnerLook {
+  return { ...base, jersey: 0x24346b, shorts: 0xf0f0f0, accent: 0xf7d038, headband: false, shoe: 0x2a2a30 };
 }
 
 // ------------------------------------------------------------------ Posen
@@ -557,12 +566,12 @@ interface Palette {
   sock: number;
 }
 
-function legPieces(hx: number, hy: number, leg: Limb, c: Palette): Piece[] {
+function legPieces(hx: number, hy: number, leg: Limb, c: Palette, point = false): Piece[] {
   const [kx, ky] = along(hx, hy, leg.upper, THIGH);
   const [ax, ay] = along(kx, ky, leg.lower, SHIN);
-  // Fuß zeigt nach vorne und kippt mit dem Unterschenkel
-  const fdx = Math.cos(leg.lower);
-  const fdy = -Math.sin(leg.lower);
+  // Fuß zeigt nach vorne und kippt mit dem Unterschenkel – gestreckt verlängert er das Bein
+  const fdx = point ? Math.sin(leg.lower + 0.35) : Math.cos(leg.lower);
+  const fdy = point ? Math.cos(leg.lower + 0.35) : -Math.sin(leg.lower);
   const [sx, sy] = lerp2(kx, ky, ax, ay, 0.72);
   const [shx, shy] = lerp2(hx, hy, kx, ky, 0.55);
   return [
@@ -844,7 +853,7 @@ export function rotatePoint(x: number, y: number, angle: number): { x: number; y
 function drawFigure(g: Gfx, hx: number, hy: number, pose: Pose, look: RunnerLook, opts: DrawOptions): void {
   const { mood = 'neutral', time = 0, speed = 0, medal = null } = opts;
   // Schwimmer: barfuß, ohne Schweißbänder und Startnummer
-  const swim = opts.cap !== undefined;
+  const swim = opts.cap !== undefined || opts.barefoot === true;
   const water: WaterTint | undefined =
     opts.waterY !== undefined && !opts.rotation ? { y: opts.waterY, color: WATER_TINT, amount: 0.3, squash: 0.5 } : undefined;
   const pieces = (list: Piece[]) => drawPieces(g, list, water);
@@ -874,7 +883,7 @@ function drawFigure(g: Gfx, hx: number, hy: number, pose: Pose, look: RunnerLook
   };
 
   pieces(armPieces(sx, sy, pose.farArm, far));
-  pieces(legPieces(hx, hy, pose.farLeg, far));
+  pieces(legPieces(hx, hy, pose.farLeg, far, opts.pointToes));
 
   // Oberkörper: Trikot, Shorts-Bund, Seitenstreifen, Glanzlicht
   const [bx, by] = lerp2(hx, hy, sx, sy, 0.24);
@@ -897,7 +906,7 @@ function drawFigure(g: Gfx, hx: number, hy: number, pose: Pose, look: RunnerLook
   drawHead(g, headX, headY, look, mood, time, speed, opts.helmet, opts.cap);
 
   if (!swim) drawHipNumber(g, hx - 3, hy, look.number);
-  pieces(legPieces(hx, hy, pose.nearLeg, near));
+  pieces(legPieces(hx, hy, pose.nearLeg, near, opts.pointToes));
   pieces(armPieces(sx, sy, pose.nearArm, near));
 }
 

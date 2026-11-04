@@ -75,7 +75,7 @@ Der `/sprint`-Ablauf nimmt immer den **obersten offenen** Punkt (`[ ]`), setzt i
   Beim ersten Start einer Disziplin kurze, animierte Erklärung der Steuerung (überspringbar,
   danach nur noch per Menü). Ersetzt die langen Textblöcke vor dem Start.
 
-- [ ] **RSG-09 Turmspringen**
+- [x] **RSG-09 Turmspringen** (v0.9.0)
   Anlauf entfällt: Absprung-Timing, in der Luft Salti/Schrauben per Tasten, gerades Eintauchen.
   Punktrichter-Wertung (Kampfrichter zeigen Tafeln). Nutzt die Drehungen aus Stabhochsprung/BMX.
 
@@ -92,7 +92,7 @@ Der `/sprint`-Ablauf nimmt immer den **obersten offenen** Punkt (`[ ]`), setzt i
   Dialog-Bausteine (`drawConfirmBox`, `drawChoiceMarker`, `drawInfoBox`) von `gfx/medalHud.ts` nach
   `gfx/hud.ts` verschieben (für das Pause-Menü RSG-03). Publikumsgeräusch während der Rückfrage pausieren.
   Aus RSG-06: Feld-Aufbau (Session-Feld, CPU-Index, Look-Seed, Profil) steht fast gleich in Race-, Bmx- und
-  SwimScene → Helfer `buildField(...)` in `data/session.ts`.
+  SwimScene → Helfer `buildField(...)` in `data/session.ts`; `setupEntrants` in Dive- und LongJumpScene ebenso.
 
 - [ ] **RSG-15 Hilfekasten im Titel**
   Tasten- und Textspalte stehen fest (x126/x276): „LEERTASTE AM BRETT“ hat nur 6 px Luft, der
@@ -118,9 +118,11 @@ Der `/sprint`-Ablauf nimmt immer den **obersten offenen** Punkt (`[ ]`), setzt i
 
 - [x] 110 m Hürden (v0.1) · Liebevollere Athleten (v0.2) · Stabhochsprung + Menü (v0.3) ·
   BMX am Strand (v0.4) · Weitsprung (v0.5) · Agenten-Team und automatischer Spieltest (v0.5.1) ·
-  Wettkampf mit Medaillenspiegel – RSG-01a (v0.6.0) · Abschlussfeier – RSG-01b (v0.7.0) · 100 m Freistil – RSG-06 (v0.8.0)
+  Wettkampf mit Medaillenspiegel – RSG-01a (v0.6.0) · Abschlussfeier – RSG-01b (v0.7.0) · 100 m Freistil – RSG-06 (v0.8.0) · Turmspringen – RSG-09 (v0.9.0)
 
 ## Offene Fragen an den Owner
 
 _(Hier trägt das Team Fragen ein, die es nicht selbst entscheiden kann. Bis zur Antwort geht es mit
 dem nächsten Punkt weiter.)_
+
+- Turmspringen: Ist die Meldung „ARSCHBOMBE!“ in Ordnung oder lieber „BOMBE!“? (Umgesetzt ist „ARSCHBOMBE!“.)

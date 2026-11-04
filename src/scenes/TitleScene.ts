@@ -18,6 +18,7 @@ import {
 } from '../data/storage';
 import { drawFlag } from '../gfx/flags';
 import { drawBmx } from '../gfx/bike';
+import { diverSwingPose, drawDiver } from '../gfx/diver';
 import { carryPole, createLook, drawRunner, drawShadow, handOffset, idlePose, type RunnerLook } from '../gfx/runner';
 import { Stadium } from '../gfx/stadium';
 import { armCirclePose, drawSwimmerUpright } from '../gfx/swimmer';
@@ -31,7 +32,7 @@ const VALUE_X = 370;
 const HELP_Y = 232;
 const ROW = { mode: 0, event: 1, nation: 2, look: 3 };
 const COMPETITION_HELP: [string, string][] = [
-  ['REIHENFOLGE', 'HÜR - WEIT - STAB - SCHW - BMX'],
+  ['REIHENFOLGE', 'HÜR-WEIT-STAB-SCHW-TURM-BMX'],
   ['WERTUNG', 'MEDAILLENSPIEGEL DER NATIONEN'],
   ['STEUERUNG', 'VOR JEDER DISZIPLIN ERKLÄRT'],
   ['PFEIL HOCH/RUNTER', 'MENÜ: ZEILE WÄHLEN'],
@@ -115,7 +116,7 @@ export class TitleScene extends Phaser.Scene {
     this.bestText = text(GAME_WIDTH / 2, 298, '', 8, '#4cd964').setOrigin(0.5, 0);
     const prompt = text(GAME_WIDTH / 2, 318, 'ENTER = START', 16).setOrigin(0.5, 0).setStroke('#10101c', 4);
     this.tweens.add({ targets: prompt, alpha: 0.25, duration: 550, yoyo: true, repeat: -1 });
-    text(GAME_WIDTH - 6, 350, 'v0.8 SOLO', 8, '#5d6278').setOrigin(1, 0);
+    text(GAME_WIDTH - 6, 350, 'v0.9 SOLO', 8, '#5d6278').setOrigin(1, 0);
 
     // Der eigene Athlet wippt neben der Steuerungshilfe
     this.previewGfx = this.add.graphics();
@@ -232,6 +233,27 @@ export class TitleScene extends Phaser.Scene {
     const x = 58;
     const y = 282;
     const key = this.mode === 'competition' ? '110h' : EVENTS[this.eventIndex].key;
+    if (key === 'dive') {
+      // An der Plattformkante mit Armschwung im Takt, darunter das Becken
+      g.fillStyle(COLORS.outline, 1);
+      g.fillRect(24, y - 1, 45, 8);
+      g.fillStyle(0xa9aeb8, 1);
+      g.fillRect(25, y, 43, 6);
+      g.fillStyle(0x3a6fa8, 1);
+      g.fillRect(25, y, 43, 2);
+      g.fillStyle(0xffffff, 1);
+      g.fillRect(65, y, 3, 6);
+      g.fillStyle(COLORS.waterDark, 1);
+      g.fillRect(24, y + 16, 80, 8);
+      g.fillStyle(COLORS.water, 1);
+      g.fillRect(24, y + 16, 80, 2);
+      g.fillStyle(0xffffff, 0.8);
+      for (let i = 0; i < 4; i++) g.fillRect(30 + ((i * 23 + Math.floor(this.elapsed * 12)) % 70), y + 17, 4, 1);
+      const lift = Math.abs(1 - 2 * ((this.elapsed + 0.25) % 1));
+      const pose = diverSwingPose(lift, 0.8);
+      drawDiver(g, x, y - pose.hip, pose, this.look, { time: this.elapsed, scale: 1 });
+      return;
+    }
     if (key === 'swim') {
       // Badekleidung auf dem Fliesenboden, die Arme kreisen
       g.fillStyle(COLORS.tileGrout, 1);

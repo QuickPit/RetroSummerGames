@@ -616,28 +616,29 @@ export function drawWaterRing(g: Gfx, x: number, y: number, r: number, time: num
 
 /**
  * Platscher beim Eintauchen: eine Krone aus Wasser steigt auf und fällt zurück,
- * dazu ein Schaumteppich. u = Alter 0..1.
+ * dazu ein Schaumteppich. u = Alter 0..1, `scale` vergrößert die ganze Krone (Turmspringen).
  */
-export function drawSplashCrown(g: Gfx, x: number, y: number, u: number): void {
+export function drawSplashCrown(g: Gfx, x: number, y: number, u: number, scale = 1): void {
   if (u >= 1) return;
   const rise = Math.sin(Math.PI * Math.min(1, u * 1.4));
   const fade = 1 - u * u;
   const cx = Math.round(x);
   // Schaumteppich
   g.fillStyle(0xffffff, 0.85 * fade);
-  g.fillEllipse(cx, y + 1, 26 + 14 * u, 5 + 2 * u);
+  g.fillEllipse(cx, y + 1, (26 + 14 * u) * scale, (5 + 2 * u) * Math.sqrt(scale));
   g.fillStyle(0xbfeaff, 0.9 * fade);
-  g.fillEllipse(cx, y + 1, 16 + 10 * u, 3);
+  g.fillEllipse(cx, y + 1, (16 + 10 * u) * scale, 3 * Math.sqrt(scale));
   // Krone: Zacken links und rechts, in der Mitte eine Säule
   const spikes = [-11, -7, -3, 1, 5, 9];
   spikes.forEach((dx, i) => {
-    const h = Math.round(rise * (5 + ((i * 7) % 5) + (Math.abs(dx) < 4 ? 6 : 0)));
+    const h = Math.round(rise * (5 + ((i * 7) % 5) + (Math.abs(dx) < 4 ? 6 : 0)) * scale);
     if (h <= 0) return;
-    const lean = Math.round((dx / 11) * 3 * u);
+    const sx = Math.round(dx * scale);
+    const lean = Math.round((dx / 11) * 3 * u * scale);
     g.fillStyle(0x2f78b8, 0.6 * fade);
-    g.fillRect(cx + dx + lean - 1, y - h, 1, h);
+    g.fillRect(cx + sx + lean - 1, y - h, 1, h);
     g.fillStyle(0xffffff, 0.95 * fade);
-    g.fillRect(cx + dx + lean, y - h, 2, h);
+    g.fillRect(cx + sx + lean, y - h, scale > 1.4 ? 3 : 2, h);
   });
 }
 

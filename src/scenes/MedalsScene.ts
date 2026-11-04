@@ -36,14 +36,15 @@ export interface MedalsSceneData {
   mode: MedalsMode;
 }
 
-// Spalten: Pfeil-Schild „DU“, Platz, Flagge, Code, Name, Medaillen (Mitte der Scheibe), Disziplinen (Mitte)
-const COL = { tag: 46, place: 76, flag: 100, code: 122, name: 154, gold: 266, silver: 294, bronze: 322 };
-const DIVIDER_X = 342;
-const EVENT_LABELS: Record<EventKey, string> = { '110h': 'HÜR', long: 'WEIT', pole: 'STAB', swim: 'SCHW', bmx: 'BMX' };
+// Spalten: Pfeil-Schild „DU“, Platz, Flagge, Code, Name, Medaillen (Mitte der Scheibe), Disziplinen (Mitte).
+// Raster für 6 Disziplinen: Der längste Name (11 Zeichen) endet bei x241, die Goldscheibe beginnt bei x250.
+const COL = { tag: 46, place: 76, flag: 100, code: 122, name: 154, gold: 256, silver: 282, bronze: 308 };
+const DIVIDER_X = 330;
+const EVENT_LABELS: Record<EventKey, string> = { '110h': 'HÜR', long: 'WEIT', pole: 'STAB', swim: 'SCHW', dive: 'TURM', bmx: 'BMX' };
 const EVENT_COLS: { key: EventKey; label: string; x: number }[] = COMPETITION_ORDER.map((key, i) => ({
   key,
   label: EVENT_LABELS[key],
-  x: 368 + i * 52,
+  x: 352 + i * 44,
 }));
 const PANEL = { x: 38, y: 44, w: GAME_WIDTH - 76 };
 const HEAD_Y = 56;

@@ -31,7 +31,8 @@ export const HALL = {
 
 /** Nummernschild am Block nach dem Anschlag: Gold, Silber, Bronze */
 const PLACE_PLATE = [COLORS.gold, COLORS.silver, COLORS.bronze];
-const WATER_FRAMES = 4;
+/** Bilder der Wasser-Animation (Texturen water0 …) */
+export const WATER_FRAMES = 4;
 const css = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 
 /** Wasserlinie (Schwimmer) einer Bahn */
@@ -393,6 +394,7 @@ export class SwimHall {
   private drawnCam = NaN;
   private clockShown = '';
   private clockTimer = 0;
+  private clockHalf = 0;
 
   constructor(scene: Phaser.Scene) {
     this.wall = scene.add.tileSprite(0, 0, GAME_WIDTH, HALL.standsY, 'hallwall').setOrigin(0).setDepth(-10);
@@ -459,9 +461,9 @@ export class SwimHall {
   /**
    * @param camPx Kameraposition in Welt-Pixeln
    * @param excitement 0..1 – wie wild das Publikum jubelt
-   * @param clock Zeit auf der Hallenuhr
+   * @param clock Zeit auf der Hallenuhr – oder ein fertiger Text (z. B. Punkte beim Turmspringen)
    */
-  update(camPx: number, dt: number, time: number, excitement: number, clock: number): void {
+  update(camPx: number, dt: number, time: number, excitement: number, clock: number | string): void {
     this.camPx = Math.round(camPx);
     this.wall.tilePositionX = camPx * 0.1;
     this.stands.tilePositionX = camPx * 0.55;
@@ -518,26 +520,29 @@ export class SwimHall {
     fillQuad(g, this.sx(m0, y0), y0, this.sx(m1, y0), y0, this.sx(m1, y1), y1, this.sx(m0, y1), y1);
   }
 
-  private drawClock(clock: number, dt: number): void {
+  private drawClock(clock: number | string, dt: number): void {
     const cx = Math.round(150 - this.camPx * 0.1);
     // Die Anzeige springt etwa 15-mal pro Sekunde weiter – spart das Neuzeichnen der Schrift
     this.clockTimer += dt;
-    const text = clock.toFixed(2);
+    const text = typeof clock === 'number' ? clock.toFixed(2) : clock;
     if (text !== this.clockShown && (this.clockTimer >= 1 / 15 || this.clockShown === '')) {
       this.clockTimer = 0;
       this.clockShown = text;
       this.clockText.setText(text);
     }
     this.clockText.setPosition(cx + 1, 29);
-    if (cx === Math.round(150 - this.drawnCam * 0.1)) return;
+    // Zeiten wie „46.50“ im gewohnten Kasten; längere Texte (Punkte) bekommen einen breiteren (16-px-Glyphen)
+    const half = this.clockShown.length <= 5 ? 38 : this.clockShown.length * 8 + 4;
+    if (cx === Math.round(150 - this.drawnCam * 0.1) && half === this.clockHalf) return;
+    this.clockHalf = half;
     const g = this.clockGfx;
     g.clear();
     g.fillStyle(0x5d6278, 1);
-    g.fillRect(cx - 38, 22, 76, 30);
+    g.fillRect(cx - half, 22, half * 2, 30);
     g.fillStyle(COLORS.outline, 1);
-    g.fillRect(cx - 36, 24, 72, 26);
+    g.fillRect(cx - half + 2, 24, half * 2 - 4, 26);
     g.fillStyle(0x2a1410, 1);
-    g.fillRect(cx - 34, 26, 68, 22);
+    g.fillRect(cx - half + 4, 26, half * 2 - 8, 22);
     g.fillStyle(0x5d6278, 1);
     g.fillRect(cx - 1, 52, 2, 8);
   }

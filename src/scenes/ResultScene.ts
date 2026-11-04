@@ -57,6 +57,7 @@ export class ResultScene extends Phaser.Scene {
   private podiumGfx!: Phaser.GameObjects.Graphics;
   /** Schwimmhalle als Kulisse (nur bei Hallen-Disziplinen) */
   private hall: SwimHall | null = null;
+  private clock: number | string = 0;
   private elapsed = 0;
   /** Szenenwechsel ist angestoßen – keine weiteren Tasten */
   private leaving = false;
@@ -82,9 +83,12 @@ export class ResultScene extends Phaser.Scene {
     const eventNo = (COMPETITION_ORDER as readonly EventKey[]).indexOf(event.key) + 1;
     // Kulisse je Disziplin: Schwimmen in der Halle (mit Hallenklang), sonst im Stadion
     this.hall = null;
+    // Die Hallenuhr zeigt Zeiten; bei Punkte-Disziplinen (Turmspringen) die eigenen Punkte
+    const score = this.result.playerScore ?? 0;
+    this.clock = event.lowerIsBetter ? score : score.toFixed(2);
     if (event.venue === 'hall') {
       this.hall = new SwimHall(this).asBackdrop();
-      this.hall.update(HALL_CAM_PX, 0, 0, 0.5, this.result.playerScore ?? 0);
+      this.hall.update(HALL_CAM_PX, 0, 0, 0.5, this.clock);
       sfx.setRoom('hall');
       this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => sfx.setRoom('open'));
     } else {
@@ -224,7 +228,7 @@ export class ResultScene extends Phaser.Scene {
   update(_time: number, deltaMs: number): void {
     const dt = deltaMs / 1000;
     this.elapsed += dt;
-    this.hall?.update(HALL_CAM_PX, dt, this.elapsed, 0.5, this.result.playerScore ?? 0);
+    this.hall?.update(HALL_CAM_PX, dt, this.elapsed, 0.5, this.clock);
     const g = this.podiumGfx;
     g.clear();
     for (const [rank, cx, h] of PODIUM) {
@@ -238,8 +242,9 @@ export class ResultScene extends Phaser.Scene {
         mood: 'joy',
         time: t,
         medal: MEDALS[rank],
-        // In der Schwimmhalle stehen die Sieger mit Badekappe auf dem Podest
-        cap: this.hall ? r.look.jersey : undefined,
+        // In der Halle barfuß im Badeanzug; Schwimmer mit Kappe, Turmspringer ohne
+        cap: this.hall && this.result.event === 'swim' ? r.look.jersey : undefined,
+        barefoot: this.hall !== null,
       });
     }
   }

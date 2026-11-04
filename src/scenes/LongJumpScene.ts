@@ -24,6 +24,7 @@ import {
   flagPose,
   handOffset,
   idlePose,
+  judgeLook,
   lerpPose,
   ljFlightPose,
   ljLandPose,
@@ -182,14 +183,7 @@ export class LongJumpScene extends Phaser.Scene {
     }));
     this.entrants = Phaser.Utils.Array.Shuffle([this.player, ...cpus]);
     // Kampfrichter in Blazer und weißer Hose, ohne Startnummer
-    this.official = {
-      ...createLook(country, 4242, 0),
-      jersey: 0x24346b,
-      shorts: 0xf0f0f0,
-      accent: 0xf7d038,
-      headband: false,
-      shoe: 0x2a2a30,
-    };
+    this.official = judgeLook(createLook(country, 4242, 0));
   }
 
   private entrantOf(j: Jumper): Entrant {
