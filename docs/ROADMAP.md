@@ -19,6 +19,10 @@ Der `/sprint`-Ablauf nimmt immer den **obersten offenen** Punkt (`[ ]`), setzt i
 
 ## Backlog
 
+> **Owner-Wunsch (04.11.2026):** erst RSG-01b (Abschlussfeier), dann die neuen Disziplinen RSG-06
+> (Schwimmen) und RSG-09 (Turmspringen) vorziehen – danach wieder von oben. Neue Disziplinen kommen
+> jeweils auch in den Wettkampf (`COMPETITION_ORDER`).
+
 ### Priorität 1 – Spiel abrunden
 
 - [ ] **RSG-01 Wettkampfmodus „Die Spiele“**
