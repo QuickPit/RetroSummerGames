@@ -59,6 +59,8 @@ export class TitleScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Kein Publikumsrauschen aus Siegerehrung oder Feier im Menü (Töne wie der Bestätigungston laufen aus)
+    sfx.crowd(0);
     this.mode = loadMode();
     this.eventIndex = loadEventIndex() % EVENTS.length;
     this.countryIndex = loadCountryIndex() % COUNTRIES.length;

@@ -475,9 +475,14 @@ async function runCompetition(browser) {
     const medals = final.table.reduce((n, r) => n + r.total, 0);
     check(medals > 0 && medals <= 12, `Unplausible Medaillenzahl ${medals}`);
 
-    // Endstand → Abschlussfeier: Podest wie im Spiegel, keine wachsende Objektzahl, ENTER führt ins Menü
+    // Endstand → Abschlussfeier: Podest wie im Spiegel, keine wachsende Objektzahl, ENTER führt ins Menü.
+    // Doppeltes ENTER (20 ms Abstand) darf die Feier nicht überspringen (Eingabesperre zu Beginn).
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(20);
     await page.keyboard.press('Enter');
     await waitActive('ceremony');
+    await page.waitForTimeout(300);
+    check(await page.evaluate(() => window.__game.scene.isActive('ceremony')), 'Doppeltes ENTER überspringt die Abschlussfeier');
     const ceremony = () =>
       page.evaluate(() => {
         const sc = window.__game.scene.getScene('ceremony');

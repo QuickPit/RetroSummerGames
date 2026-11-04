@@ -248,32 +248,40 @@ const TROPHY_COLORS: Record<string, number> = {
   b: 0x472c18,
 };
 
-/** Pokal; (x, bottom) = Mitte der Unterkante. `time` lässt einen Glanzpunkt funkeln. */
-export function drawTrophy(g: Gfx, x: number, bottom: number, time: number): void {
-  const x0 = Math.round(x) - 7;
-  const y0 = Math.round(bottom) - TROPHY.length;
+export const TROPHY_SIZE = TROPHY.length;
+
+/** Pokal einmalig als Textur (15×15) anlegen – die Szene verschiebt ihn dann als Image. */
+export function createTrophyTexture(scene: Phaser.Scene, key: string): void {
+  if (scene.textures.exists(key)) return;
+  const g = scene.make.graphics({}, false);
   TROPHY.forEach((row, j) => {
     for (let i = 0; i < row.length; i++) {
       const c = TROPHY_COLORS[row[i]];
       if (c === undefined) continue;
       g.fillStyle(c, 1);
-      g.fillRect(x0 + i, y0 + j, 1, 1);
+      g.fillRect(i, j, 1, 1);
     }
   });
-  // Funkeln
+  g.generateTexture(key, TROPHY_SIZE, TROPHY_SIZE);
+  g.destroy();
+}
+
+/** Funkeln auf dem Pokal; (x0, y0) = linke obere Ecke der Pokal-Textur */
+export function drawTrophySparkle(g: Gfx, x0: number, y0: number, time: number): void {
   const t = time % 1.6;
-  if (t < 0.4) {
-    const a = 1 - Math.abs(t - 0.2) / 0.2;
-    g.fillStyle(0xffffff, a);
-    g.fillRect(x0 + 4, y0 + 1, 1, 5);
-    g.fillRect(x0 + 2, y0 + 3, 5, 1);
-  }
+  if (t >= 0.4) return;
+  const a = 1 - Math.abs(t - 0.2) / 0.2;
+  g.fillStyle(0xffffff, a);
+  g.fillRect(x0 + 4, y0 + 1, 1, 5);
+  g.fillRect(x0 + 2, y0 + 3, 5, 1);
 }
 
 // ------------------------------------------------------------ Feuerwerk
 
-const SPARKS = 960;
-const ROCKETS = 8;
+const SPARKS = 1152;
+const ROCKETS = 12;
+/** Schweiffunken pro Sekunde und Rakete – zeitbasiert, unabhängig von der Bildrate */
+const TRAIL_RATE = 40;
 const GRAVITY = 34;
 
 export type BurstShape = 'peony' | 'ring' | 'willow' | 'double';
@@ -288,6 +296,10 @@ interface Rocket {
   vx: number;
   shape: BurstShape;
   colors: [number, number];
+  /** Großer Knall (letzte Rakete einer Salve) */
+  big: boolean;
+  /** Angesammelte Schweiffunken */
+  trail: number;
 }
 
 /**
@@ -313,6 +325,8 @@ export class Fireworks {
     vy: 0,
     shape: 'peony' as BurstShape,
     colors: [0xffffff, 0xffffff] as [number, number],
+    big: false,
+    trail: 0,
   }));
   /** Aufhellung des Himmels nach einer Explosion */
   flash = 0;
@@ -324,8 +338,14 @@ export class Fireworks {
   }
 
   /** Startet eine Rakete vom Boden (startY) zur Höhe targetY. false = alle Raketen unterwegs. */
-  launch(x: number, startY: number, targetY: number, shape: BurstShape, colors: [number, number]): boolean {
-    const r = this.rockets.find((k) => !k.active);
+  launch(x: number, startY: number, targetY: number, shape: BurstShape, colors: [number, number], big = false): boolean {
+    let r: Rocket | undefined;
+    for (const k of this.rockets) {
+      if (!k.active) {
+        r = k;
+        break;
+      }
+    }
     if (!r) return false;
     r.active = true;
     r.x = x;
@@ -334,18 +354,21 @@ export class Fireworks {
     r.vy = -Math.sqrt(2 * GRAVITY * 1.6 * (startY - targetY));
     r.shape = shape;
     r.colors = colors;
+    r.big = big;
+    r.trail = 0;
     return true;
   }
 
-  /** Zufällige Rakete; liefert false, wenn keine frei war */
-  launchRandom(startY: number, minX = 50, maxX = GAME_WIDTH - 50): boolean {
+  /** Zufällige Rakete; liefert false, wenn keine frei war. `big` = großer Knall zum Abschluss einer Salve */
+  launchRandom(startY: number, big = false, minX = 50, maxX = GAME_WIDTH - 50): boolean {
     const rng = this.rng;
     const pick = () => FIREWORK_COLORS[Math.floor(rng() * FIREWORK_COLORS.length)];
     const shapes: BurstShape[] = ['peony', 'peony', 'ring', 'willow', 'double'];
-    const shape = shapes[Math.floor(rng() * shapes.length)];
+    const shape = big ? 'double' : shapes[Math.floor(rng() * shapes.length)];
     const c1 = shape === 'willow' ? 0xffd23f : pick();
     const c2 = rng() < 0.5 ? c1 : pick();
-    return this.launch(minX + rng() * (maxX - minX), startY, 30 + rng() * 60, shape, [c1, c2]);
+    const x = big ? GAME_WIDTH / 2 + (rng() - 0.5) * 160 : minX + rng() * (maxX - minX);
+    return this.launch(x, startY, big ? 40 + rng() * 16 : 30 + rng() * 60, shape, [c1, c2], big);
   }
 
   private spawn(x: number, y: number, vx: number, vy: number, life: number, color: number, kind: number): void {
@@ -364,7 +387,8 @@ export class Fireworks {
   private explode(r: Rocket): void {
     const rng = this.rng;
     const [c1, c2] = r.colors;
-    const n = r.shape === 'willow' ? 56 : r.shape === 'double' ? 72 : 64;
+    const n = r.big ? 104 : r.shape === 'willow' ? 56 : r.shape === 'double' ? 72 : 64;
+    const scale = r.big ? 1.25 : 1;
     for (let k = 0; k < n; k++) {
       const a = (k / n) * Math.PI * 2 + rng() * 0.12;
       let speed: number;
@@ -387,26 +411,34 @@ export class Fireworks {
         default:
           speed = 24 + Math.sqrt(rng()) * 64;
       }
+      speed *= scale;
       this.spawn(r.x, r.y, Math.cos(a) * speed, Math.sin(a) * speed * 0.9, life, color, kind);
     }
     this.flash = 1;
     this.flashColor = c1;
   }
 
-  /** Simuliert dt Sekunden; liefert die Zahl der Explosionen (für den Klang) */
+  /**
+   * Simuliert einen festen Zeitschritt dt (die Szene ruft mit 1/60 s auf).
+   * Liefert 0 = keine Explosion, 1 = Explosion, 2 = großer Knall (für den Klang).
+   */
   update(dt: number): number {
-    let bangs = 0;
+    let bang = 0;
     for (const r of this.rockets) {
       if (!r.active) continue;
       r.x += r.vx * dt;
       r.y += r.vy * dt;
       r.vy += GRAVITY * 1.6 * dt;
-      // Schweif aus kleinen Funken
-      this.spawn(r.x, r.y + 2, (this.rng() - 0.5) * 6, 8 + this.rng() * 6, 0.35 + this.rng() * 0.2, 0xffb050, 0);
+      // Schweif aus kleinen Funken, zeitbasiert ausgestoßen
+      r.trail += TRAIL_RATE * dt;
+      while (r.trail >= 1) {
+        r.trail -= 1;
+        this.spawn(r.x, r.y + 2, (this.rng() - 0.5) * 6, 8 + this.rng() * 6, 0.35 + this.rng() * 0.2, 0xffb050, 0);
+      }
       if (r.vy >= -10) {
         r.active = false;
         this.explode(r);
-        bangs++;
+        bang = Math.max(bang, r.big ? 2 : 1);
       }
     }
     const drag = Math.max(0, 1 - 1.3 * dt);
@@ -420,7 +452,7 @@ export class Fireworks {
       this.y[i] += this.vy[i] * dt;
     }
     this.flash = Math.max(0, this.flash - dt * 3);
-    return bangs;
+    return bang;
   }
 
   /** Zeichnet Himmelsaufhellung, Raketen und Funken */
@@ -457,13 +489,6 @@ export class Fireworks {
         g.fillRect(x, y, 1, kind === 2 ? 2 : 1);
       }
     }
-  }
-
-  /** Anzahl lebender Funken (für Tests der Pool-Größe) */
-  liveSparks(): number {
-    let n = 0;
-    for (let i = 0; i < SPARKS; i++) if (this.life[i] > 0) n++;
-    return n;
   }
 }
 
@@ -577,8 +602,9 @@ export class CrowdLights {
     this.time += dt;
     for (let i = 0; i < FLASHES; i++) this.life[i] = Math.max(0, this.life[i] - dt);
     if (this.rng() < this.rate * dt) {
-      const i = this.life.findIndex((l) => l <= 0);
-      if (i >= 0) {
+      let i = 0;
+      while (i < FLASHES && this.life[i] > 0) i++;
+      if (i < FLASHES) {
         this.fx[i] = 8 + this.rng() * (GAME_WIDTH - 16);
         this.fy[i] = this.top + 8 + this.rng() * (this.bottom - this.top - 22);
         this.life[i] = 0.14;

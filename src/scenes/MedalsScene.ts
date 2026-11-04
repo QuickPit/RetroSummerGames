@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { sfx } from '../audio/sfx';
 import { FONT, GAME_WIDTH } from '../config';
-import { COUNTRIES, countryByCode } from '../data/countries';
+import { COUNTRIES, countryByCode, winnersLabel } from '../data/countries';
 import { eventByKey, type EventKey } from '../data/events';
 import { endCompetition, getCompetition } from '../data/session';
 import { drawFlag } from '../gfx/flags';
@@ -132,6 +132,8 @@ export class MedalsScene extends Phaser.Scene {
       // Tasten aus der vorigen Szene nicht übernehmen
       if (ev.repeat || this.leaving || confirmPending() || (ev.timeStamp > 0 && ev.timeStamp < createdAt)) return;
       if (ev.code === 'Enter' || ev.code === 'NumpadEnter' || ev.code === 'Space') {
+        // Vor der Feier die Fanfare des Endstands stoppen, damit sie sich nicht mit der Siegermelodie überlagert
+        if (this.mode === 'final') sfx.stopAll();
         sfx.confirm();
         this.proceed();
       } else if (ev.code === 'Escape') {
@@ -171,6 +173,7 @@ export class MedalsScene extends Phaser.Scene {
 
   private toMenu(): void {
     this.leaving = true;
+    sfx.stopAll();
     endCompetition();
     this.scene.start('title');
   }
@@ -307,11 +310,7 @@ export class MedalsScene extends Phaser.Scene {
     winners.forEach((code, i) => {
       drawFlag(g, countryByCode(code).flag, GAME_WIDTH / 2 - total / 2 + i * (flagW + gap), BOX.y + 30, flagW, 22);
     });
-    const name =
-      winners.length === 1
-        ? countryByCode(winners[0]).name
-        : `${winners.slice(0, -1).join(', ')} UND ${winners[winners.length - 1]}`;
-    this.text(GAME_WIDTH / 2, BOX.y + 64, name, 16, '#f7c843').setOrigin(0.5, 0);
+    this.text(GAME_WIDTH / 2, BOX.y + 64, winnersLabel(winners), 16, '#f7c843').setOrigin(0.5, 0);
   }
 
   update(_time: number, deltaMs: number): void {
