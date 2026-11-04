@@ -71,7 +71,14 @@ export interface DrawOptions {
   rotation?: number;
   /** Farbe eines Helms (BMX) */
   helmet?: number;
+  /** Farbe einer Badekappe: Schwimmbrille, barfuß, ohne Startnummer */
+  cap?: number;
+  /** Wasseroberfläche (Bildschirm-Y, nur ohne Drehung): Teile darunter liegen im Wasser */
+  waterY?: number;
 }
+
+/** Farbe, zu der Körperteile unter Wasser hin gemischt werden */
+export const WATER_TINT = 0x1f6fb0;
 
 const HAIR_STYLES: HairStyle[] = ['short', 'short', 'buzz', 'afro', 'ponytail', 'ponytail', 'bun', 'bald'];
 const SHOE_COLORS = [0xff3d7f, 0x2fe0ff, 0xffe14d, 0x7dff4d, 0xffffff, 0xff8a1f, 0xb06cff];
@@ -380,11 +387,11 @@ export function lerpPose(a: Pose, b: Pose, t: number): Pose {
 type Gfx = Phaser.GameObjects.Graphics;
 
 /** Ein Körperteil: sich verjüngendes Segment oder Kreis. */
-type Piece =
+export type Piece =
   | { kind: 'seg'; x0: number; y0: number; x1: number; y1: number; w0: number; w1: number; color: number; outline: boolean; caps: boolean }
   | { kind: 'dot'; x: number; y: number; r: number; color: number; outline: boolean };
 
-function seg(
+export function seg(
   x0: number,
   y0: number,
   x1: number,
@@ -398,7 +405,7 @@ function seg(
   return { kind: 'seg', x0, y0, x1, y1, w0, w1, color, outline, caps };
 }
 
-function dot(x: number, y: number, r: number, color: number, outline = true): Piece {
+export function dot(x: number, y: number, r: number, color: number, outline = true): Piece {
   return { kind: 'dot', x, y, r, color, outline };
 }
 
@@ -406,22 +413,61 @@ function quad(g: Gfx, x0: number, y0: number, x1: number, y1: number, w0: number
   const len = Math.hypot(x1 - x0, y1 - y0) || 1;
   const nx = -(y1 - y0) / len;
   const ny = (x1 - x0) / len;
-  g.fillPoints(
-    [
-      { x: x0 + (nx * w0) / 2, y: y0 + (ny * w0) / 2 },
-      { x: x1 + (nx * w1) / 2, y: y1 + (ny * w1) / 2 },
-      { x: x1 - (nx * w1) / 2, y: y1 - (ny * w1) / 2 },
-      { x: x0 - (nx * w0) / 2, y: y0 - (ny * w0) / 2 },
-    ],
-    true,
-  );
+  // Zwei Dreiecke statt fillPoints: spart die Triangulierung in jedem Bild
+  const ax = x0 + (nx * w0) / 2;
+  const ay = y0 + (ny * w0) / 2;
+  const bx = x1 + (nx * w1) / 2;
+  const by = y1 + (ny * w1) / 2;
+  const cx = x1 - (nx * w1) / 2;
+  const cy = y1 - (ny * w1) / 2;
+  const dx = x0 - (nx * w0) / 2;
+  const dy = y0 - (ny * w0) / 2;
+  g.fillTriangle(ax, ay, bx, by, cx, cy);
+  g.fillTriangle(ax, ay, cx, cy, dx, dy);
 }
 
-/** Erst alle Konturen, dann alle Füllungen – so entstehen saubere Gelenke. */
-function drawPieces(g: Gfx, pieces: Piece[]): void {
-  g.fillStyle(COLORS.outline, 1);
+/** Unterwasserfarben: Teile unterhalb von `y` werden zu `color` hin gemischt. */
+export interface WaterTint {
+  y: number;
+  color: number;
+  amount: number;
+  /** Brechung: Tiefe unter `y` wird mit diesem Faktor gestaucht (Teile wirken flacher) */
+  squash?: number;
+}
+
+/** Staucht die Lage eines Teils unter der Oberfläche (Lichtbrechung) */
+function refract(p: Piece, w: WaterTint): Piece {
+  const k = w.squash;
+  if (k === undefined) return p;
+  const f = (y: number) => (y > w.y ? w.y + (y - w.y) * k : y);
+  return p.kind === 'dot' ? { ...p, y: f(p.y) } : { ...p, y0: f(p.y0), y1: f(p.y1) };
+}
+
+/** Mischt zwei Farben, t = 0 → a, t = 1 → b */
+export function mixColor(a: number, b: number, t: number): number {
+  const ch = (shift: number) => {
+    const x = (a >> shift) & 0xff;
+    const y = (b >> shift) & 0xff;
+    return Math.round(x + (y - x) * t) << shift;
+  };
+  return ch(16) | ch(8) | ch(0);
+}
+
+function pieceY(p: Piece): number {
+  return p.kind === 'dot' ? p.y : (p.y0 + p.y1) / 2;
+}
+
+/**
+ * Erst alle Konturen, dann alle Füllungen – so entstehen saubere Gelenke.
+ * Mit `water` erscheinen Teile unter der Oberfläche blasser und bläulich.
+ */
+export function drawPieces(g: Gfx, list: Piece[], water?: WaterTint): void {
+  const pieces = water?.squash !== undefined ? list.map((p) => refract(p, water)) : list;
+  const wet = (p: Piece) => water !== undefined && pieceY(p) > water.y;
+  const outlineWet = water ? mixColor(COLORS.outline, water.color, water.amount * 0.8) : COLORS.outline;
   for (const p of pieces) {
     if (!p.outline) continue;
+    g.fillStyle(wet(p) ? outlineWet : COLORS.outline, 1);
     if (p.kind === 'dot') {
       g.fillCircle(p.x, p.y, p.r + 1);
     } else {
@@ -433,7 +479,7 @@ function drawPieces(g: Gfx, pieces: Piece[]): void {
     }
   }
   for (const p of pieces) {
-    g.fillStyle(p.color, 1);
+    g.fillStyle(wet(p) ? mixColor(p.color, water!.color, water!.amount) : p.color, 1);
     if (p.kind === 'dot') {
       g.fillCircle(p.x, p.y, p.r);
     } else {
@@ -446,14 +492,14 @@ function drawPieces(g: Gfx, pieces: Piece[]): void {
   }
 }
 
-function shade(color: number, factor: number): number {
+export function shade(color: number, factor: number): number {
   const r = Math.min(255, Math.round(((color >> 16) & 0xff) * factor));
   const g = Math.min(255, Math.round(((color >> 8) & 0xff) * factor));
   const b = Math.min(255, Math.round((color & 0xff) * factor));
   return (r << 16) | (g << 8) | b;
 }
 
-function along(x: number, y: number, angle: number, len: number): [number, number] {
+export function along(x: number, y: number, angle: number, len: number): [number, number] {
   return [x + Math.sin(angle) * len, y + Math.cos(angle) * len];
 }
 
@@ -557,6 +603,31 @@ function drawHelmet(g: Gfx, hx: number, hy: number, color: number, accent: numbe
   g.lineBetween(hx - 1, hy - 1, hx + 1.5, hy + 4);
 }
 
+/** Badekappe mit Schwimmbrille; (hx, hy) ist die Kopfmitte, Blick nach rechts. */
+export function drawSwimCap(g: Gfx, hx: number, hy: number, color: number, strap: number): void {
+  const shell = (r: number) => {
+    const pts: { x: number; y: number }[] = [];
+    for (let i = 0; i <= 12; i++) {
+      const a = Math.PI - 0.55 + (i / 12) * (Math.PI + 0.3);
+      pts.push({ x: hx - 0.3 + Math.cos(a) * r, y: hy - 0.3 + Math.sin(a) * r });
+    }
+    return pts;
+  };
+  g.fillStyle(COLORS.outline, 1);
+  g.fillPoints(shell(HEAD_R + 1.4), true);
+  g.fillStyle(color, 1);
+  g.fillPoints(shell(HEAD_R + 0.5), true);
+  g.fillStyle(shade(color, 1.35), 1);
+  g.fillRect(hx - 2, hy - HEAD_R, 3, 1);
+  // Brille: Glas vorne, Band nach hinten
+  g.fillStyle(strap, 1);
+  g.fillRect(hx - HEAD_R, hy - 1.5, HEAD_R + 2, 1);
+  g.fillStyle(COLORS.outline, 1);
+  g.fillRect(hx + 1.5, hy - 2, 4, 3);
+  g.fillStyle(0x6fd3ff, 1);
+  g.fillRect(hx + 2.5, hy - 1.5, 2, 1);
+}
+
 function drawHead(
   g: Gfx,
   hx: number,
@@ -566,13 +637,16 @@ function drawHead(
   time: number,
   speed: number,
   helmet?: number,
+  cap?: number,
 ): void {
   const r = HEAD_R;
   const hair = look.hair;
   const wind = Math.min(1, speed / 8);
+  // Unter Helm oder Badekappe verschwinden Dutt und Afro
+  const covered = helmet !== undefined || cap !== undefined;
 
   // Pferdeschwanz weht hinterher
-  if (look.hairStyle === 'ponytail') {
+  if (look.hairStyle === 'ponytail' && cap === undefined) {
     const sway = Math.sin(time * 14 + look.seed) * (0.15 + 0.2 * wind);
     const a = -0.35 - 1.05 * wind + sway;
     const [bx, by] = [hx - r + 0.5, hy - 2];
@@ -580,10 +654,10 @@ function drawHead(
     const [p2x, p2y] = along(p1x, p1y, a + sway * 1.5 - 0.15, 4);
     drawPieces(g, [seg(bx, by, p1x, p1y, 3.2, 2.6, hair), seg(p1x, p1y, p2x, p2y, 2.6, 1.4, hair), dot(bx, by, 1.4, look.accent, false)]);
   }
-  if (look.hairStyle === 'bun' && helmet === undefined) drawPieces(g, [dot(hx - r + 0.5, hy - r + 1.5, 2.6, hair)]);
+  if (look.hairStyle === 'bun' && !covered) drawPieces(g, [dot(hx - r + 0.5, hy - r + 1.5, 2.6, hair)]);
 
   // Kopf mit Kontur; die Haare bleiben als Sichel oben und hinten stehen
-  if (look.hairStyle === 'afro' && helmet === undefined) {
+  if (look.hairStyle === 'afro' && !covered) {
     g.fillStyle(COLORS.outline, 1);
     g.fillCircle(hx - 1.2, hy - 1.8, r + 2.8);
     g.fillStyle(hair, 1);
@@ -591,7 +665,7 @@ function drawHead(
   }
   g.fillStyle(COLORS.outline, 1);
   g.fillCircle(hx, hy, r + 1);
-  const hasHair = look.hairStyle !== 'bald';
+  const hasHair = look.hairStyle !== 'bald' && cap === undefined;
   g.fillStyle(hasHair ? hair : look.skin, 1);
   g.fillCircle(hx, hy, r);
   if (hasHair) {
@@ -606,9 +680,10 @@ function drawHead(
   g.fillRect(hx + r, hy, 1, 2);
 
   if (helmet !== undefined) drawHelmet(g, hx, hy, helmet, look.accent);
+  if (cap !== undefined) drawSwimCap(g, hx, hy, cap, look.accent);
 
   // Stirnband im 80er-Stil, die Enden flattern
-  if (look.headband && helmet === undefined) {
+  if (look.headband && !covered) {
     g.fillStyle(look.accent, 1);
     g.fillRect(hx - r, hy - 3, r * 2, 2);
     const flap = Math.sin(time * 16 + look.seed) * (0.5 + wind);
@@ -621,7 +696,9 @@ function drawHead(
   const ey = hy - 1;
   const blink = (time + look.seed * 0.37) % 3.4 < 0.13;
   g.fillStyle(COLORS.outline, 1);
-  if (mood === 'joy' || ((mood === 'neutral' || mood === 'tired') && blink)) {
+  if (cap !== undefined) {
+    // Die Schwimmbrille verdeckt Augen und Brauen
+  } else if (mood === 'joy' || ((mood === 'neutral' || mood === 'tired') && blink)) {
     // Geschlossene, lachende Augen
     g.fillRect(ex, ey, 2, 1);
     if (mood === 'joy') g.fillRect(ex + 0.5, ey - 1, 1, 1);
@@ -632,7 +709,9 @@ function drawHead(
     g.fillRect(ex + 1, ey, 1, 1);
   }
   // Augenbraue: angestrengt schräg, erschrocken hochgezogen
-  if (mood === 'effort') {
+  if (cap !== undefined) {
+    // keine sichtbaren Brauen
+  } else if (mood === 'effort') {
     g.fillRect(ex - 0.5, ey - 2.5, 1, 1);
     g.fillRect(ex + 0.5, ey - 2, 2, 1);
   } else {
@@ -723,6 +802,11 @@ export function rotatePoint(x: number, y: number, angle: number): { x: number; y
 
 function drawFigure(g: Gfx, hx: number, hy: number, pose: Pose, look: RunnerLook, opts: DrawOptions): void {
   const { mood = 'neutral', time = 0, speed = 0, medal = null } = opts;
+  // Schwimmer: barfuß, ohne Schweißbänder und Startnummer
+  const swim = opts.cap !== undefined;
+  const water: WaterTint | undefined =
+    opts.waterY !== undefined && !opts.rotation ? { y: opts.waterY, color: WATER_TINT, amount: 0.3, squash: 0.5 } : undefined;
+  const pieces = (list: Piece[]) => drawPieces(g, list, water);
   const ux = Math.sin(pose.lean);
   const uy = -Math.cos(pose.lean);
   const sx = hx + ux * TORSO;
@@ -735,27 +819,27 @@ function drawFigure(g: Gfx, hx: number, hy: number, pose: Pose, look: RunnerLook
     skin: look.skin,
     jersey: look.jersey,
     shorts: look.shorts,
-    accent: look.accent,
-    shoe: look.shoe,
-    sock: 0xffffff,
+    accent: swim ? look.skin : look.accent,
+    shoe: swim ? look.skin : look.shoe,
+    sock: swim ? look.skin : 0xffffff,
   };
   const far: Palette = {
     skin: shade(look.skin, 0.72),
     jersey: shade(look.jersey, 0.72),
     shorts: shade(look.shorts, 0.72),
-    accent: shade(look.accent, 0.72),
-    shoe: shade(look.shoe, 0.72),
-    sock: 0xb8b8c8,
+    accent: shade(swim ? look.skin : look.accent, 0.72),
+    shoe: shade(swim ? look.skin : look.shoe, 0.72),
+    sock: swim ? shade(look.skin, 0.72) : 0xb8b8c8,
   };
 
-  drawPieces(g, armPieces(sx, sy, pose.farArm, far));
-  drawPieces(g, legPieces(hx, hy, pose.farLeg, far));
+  pieces(armPieces(sx, sy, pose.farArm, far));
+  pieces(legPieces(hx, hy, pose.farLeg, far));
 
   // Oberkörper: Trikot, Shorts-Bund, Seitenstreifen, Glanzlicht
   const [bx, by] = lerp2(hx, hy, sx, sy, 0.24);
   const [nkx, nky] = [sx + ux * (NECK + 1), sy + uy * (NECK + 1)];
   const [cx, cy] = lerp2(hx, hy, sx, sy, 0.68);
-  drawPieces(g, [
+  pieces([
     seg(sx, sy, nkx, nky, 3.4, 3, look.skin),
     seg(hx, hy, sx, sy, 8.5, 10, look.jersey),
     // Brustkorb und Gesäß geben der Silhouette Form
@@ -769,11 +853,11 @@ function drawFigure(g: Gfx, hx: number, hy: number, pose: Pose, look: RunnerLook
 
   const headX = sx + ux * (NECK + HEAD_R);
   const headY = sy + uy * (NECK + HEAD_R);
-  drawHead(g, headX, headY, look, mood, time, speed, opts.helmet);
+  drawHead(g, headX, headY, look, mood, time, speed, opts.helmet, opts.cap);
 
-  drawHipNumber(g, hx - 3, hy, look.number);
-  drawPieces(g, legPieces(hx, hy, pose.nearLeg, near));
-  drawPieces(g, armPieces(sx, sy, pose.nearArm, near));
+  if (!swim) drawHipNumber(g, hx - 3, hy, look.number);
+  pieces(legPieces(hx, hy, pose.nearLeg, near));
+  pieces(armPieces(sx, sy, pose.nearArm, near));
 }
 
 /** Schatten auf der Bahn – wird im Sprung kleiner und heller. */

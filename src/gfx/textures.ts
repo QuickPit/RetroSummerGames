@@ -142,13 +142,45 @@ function drawStands(ctx: Ctx, frame: number): void {
   const top = 14;
   const rowH = 7;
   const rows = Math.floor((H - top - 10) / rowH);
+  drawCrowdRows(ctx, frame, W, top, rows, rowH, rng, ['#6b7088', '#5d6278', '#4a4e63']);
+  // Treppen
+  for (let x = 89; x < W; x += 96) {
+    ctx.fillStyle = '#8e93a8';
+    ctx.fillRect(x, top, 7, rows * rowH);
+    for (let y = top; y < top + rows * rowH; y += 3) {
+      ctx.fillStyle = '#767b90';
+      ctx.fillRect(x, y, 7, 1);
+    }
+  }
+  // Mauer vor den Rängen
+  const wallY = top + rows * rowH;
+  ctx.fillStyle = '#2a4a7a';
+  ctx.fillRect(0, wallY, W, H - wallY);
+  ctx.fillStyle = '#1e365a';
+  ctx.fillRect(0, wallY, W, 2);
+}
+
+/**
+ * Publikum in Sitzreihen; `frame` 1 = Jubel (springen, Arme hoch).
+ * `rowColors`: Reihe gerade, Reihe ungerade, Stufenkante.
+ */
+export function drawCrowdRows(
+  ctx: Ctx,
+  frame: number,
+  W: number,
+  top: number,
+  rows: number,
+  rowH: number,
+  rng: () => number,
+  rowColors: readonly [string, string, string],
+): void {
   const shirts = ['#e8442e', '#f7d038', '#2456c8', '#ffffff', '#2d8a4e', '#f08a24', '#8a3fc4', '#1a1a1a', '#e85d9a', '#47c1d9'];
   const skins = ['#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#ffdbac'];
   for (let r = 0; r < rows; r++) {
     const y = top + r * rowH;
-    ctx.fillStyle = r % 2 === 0 ? '#6b7088' : '#5d6278';
+    ctx.fillStyle = r % 2 === 0 ? rowColors[0] : rowColors[1];
     ctx.fillRect(0, y, W, rowH);
-    ctx.fillStyle = '#4a4e63';
+    ctx.fillStyle = rowColors[2];
     ctx.fillRect(0, y + rowH - 1, W, 1);
     for (let x = 1 + (r % 2) * 2; x < W - 3; x += 4) {
       const aisle = x % 96 > 88;
@@ -169,19 +201,4 @@ function drawStands(ctx: Ctx, frame: number): void {
       }
     }
   }
-  // Treppen
-  for (let x = 89; x < W; x += 96) {
-    ctx.fillStyle = '#8e93a8';
-    ctx.fillRect(x, top, 7, rows * rowH);
-    for (let y = top; y < top + rows * rowH; y += 3) {
-      ctx.fillStyle = '#767b90';
-      ctx.fillRect(x, y, 7, 1);
-    }
-  }
-  // Mauer vor den Rängen
-  const wallY = top + rows * rowH;
-  ctx.fillStyle = '#2a4a7a';
-  ctx.fillRect(0, wallY, W, H - wallY);
-  ctx.fillStyle = '#1e365a';
-  ctx.fillRect(0, wallY, W, 2);
 }

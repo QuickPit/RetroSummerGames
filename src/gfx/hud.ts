@@ -193,3 +193,17 @@ export function drawActionKey(g: Phaser.GameObjects.Graphics, active: boolean, c
   g.fillStyle(active ? 0x2a8aa0 : 0x3a3f55, 1);
   g.fillRect(244, BOTTOM_Y + 30, 50, 3);
 }
+
+/** Kleine Pfeil-hoch-Taste; `lit` lässt sie aufleuchten (z. B. beim Atmen). */
+export function drawUpKey(g: Phaser.GameObjects.Graphics, x: number, lit: boolean, color: number = COLORS.yellow): void {
+  g.fillStyle(COLORS.outline, 1);
+  g.fillRect(x - 1, BOTTOM_Y + 15, 22, 20);
+  g.fillStyle(lit ? color : 0x5d6278, 1);
+  g.fillRect(x, BOTTOM_Y + 16, 20, 17);
+  g.fillStyle(lit ? COLORS.orange : 0x3a3f55, 1);
+  g.fillRect(x, BOTTOM_Y + 30, 20, 3);
+  g.fillStyle(COLORS.outline, 1);
+  const cx = x + 10;
+  const cy = BOTTOM_Y + 22;
+  g.fillTriangle(cx, cy - 5, cx - 5, cy + 4, cx + 5, cy + 4);
+}

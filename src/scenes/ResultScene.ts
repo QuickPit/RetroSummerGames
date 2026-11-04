@@ -6,6 +6,7 @@ import { eventByKey, type EventKey } from '../data/events';
 import { getCompetition, setCompetition } from '../data/session';
 import { loadBest, saveBest } from '../data/storage';
 import { drawFlag } from '../gfx/flags';
+import { SwimHall } from '../gfx/pool';
 import { cheerPose, drawRunner, wavePose, type RunnerLook } from '../gfx/runner';
 import { Stadium } from '../gfx/stadium';
 import { COMPETITION_ORDER, currentEvent, recordEvent } from '../sim/competition';
@@ -48,10 +49,14 @@ const PODIUM: [number, number, number][] = [
   [2, GAME_WIDTH / 2 + 70, 22],
 ];
 const CELL_X = [320, 400, 480];
+/** Kamera der Schwimmhalle hinter dem Podest: Beckenmitte ohne Wimpel */
+const HALL_CAM_PX = 520;
 
 export class ResultScene extends Phaser.Scene {
   private result!: ResultSceneData;
   private podiumGfx!: Phaser.GameObjects.Graphics;
+  /** Schwimmhalle als Kulisse (nur bei Hallen-Disziplinen) */
+  private hall: SwimHall | null = null;
   private elapsed = 0;
   /** Szenenwechsel ist angestoßen – keine weiteren Tasten */
   private leaving = false;
@@ -75,8 +80,16 @@ export class ResultScene extends Phaser.Scene {
       setCompetition(recordEvent(competition, event.key, rows.map((r) => ({ code: r.country.code, valid: r.valid }))));
     }
     const eventNo = (COMPETITION_ORDER as readonly EventKey[]).indexOf(event.key) + 1;
-    const stadium = new Stadium(this);
-    stadium.update(1200, 0, 0, 0);
+    // Kulisse je Disziplin: Schwimmen in der Halle (mit Hallenklang), sonst im Stadion
+    this.hall = null;
+    if (event.venue === 'hall') {
+      this.hall = new SwimHall(this).asBackdrop();
+      this.hall.update(HALL_CAM_PX, 0, 0, 0.5, this.result.playerScore ?? 0);
+      sfx.setRoom('hall');
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => sfx.setRoom('open'));
+    } else {
+      new Stadium(this).update(1200, 0, 0, 0);
+    }
     this.add.rectangle(0, 0, GAME_WIDTH, 360, 0x10101c, 0.78).setOrigin(0);
     this.cameras.main.fadeIn(300, 16, 16, 28);
 
@@ -209,7 +222,9 @@ export class ResultScene extends Phaser.Scene {
   }
 
   update(_time: number, deltaMs: number): void {
-    this.elapsed += deltaMs / 1000;
+    const dt = deltaMs / 1000;
+    this.elapsed += dt;
+    this.hall?.update(HALL_CAM_PX, dt, this.elapsed, 0.5, this.result.playerScore ?? 0);
     const g = this.podiumGfx;
     g.clear();
     for (const [rank, cx, h] of PODIUM) {
@@ -223,6 +238,8 @@ export class ResultScene extends Phaser.Scene {
         mood: 'joy',
         time: t,
         medal: MEDALS[rank],
+        // In der Schwimmhalle stehen die Sieger mit Badekappe auf dem Podest
+        cap: this.hall ? r.look.jersey : undefined,
       });
     }
   }

@@ -34,6 +34,15 @@ export const COLORS = {
   gold: 0xf7c843,
   silver: 0xc9d1d9,
   bronze: 0xcd7f3a,
+  // Schwimmhalle
+  water: 0x2b86cf,
+  waterLight: 0x7fd0f4,
+  waterDark: 0x1c5a99,
+  tile: 0xe4edf1,
+  tileGrout: 0xa9bcc6,
+  ropeRed: 0xe0402c,
+  ropeBlue: 0x2a5fd0,
+  ropeWhite: 0xf4f4f4,
 } as const;
 
 export const SKIN_TONES = [0xf1c27d, 0xe0ac69, 0xc68642, 0x8d5524, 0xffdbac, 0x6b3e26] as const;
