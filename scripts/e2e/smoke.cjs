@@ -31,6 +31,8 @@ const BOT_OF_SCENE = { race: 'hurdles', polevault: 'pole', longjump: 'long', bmx
 // ---------------------------------------------------------------- Bot im Browser
 // Läuft per page.evaluate im Spiel. Liest den Zustand der Szene in jedem Takt
 // und schickt echte Tastatur-Ereignisse – ohne Verzögerung durch Playwright.
+// 'pole-out' = Stabhochsprung im Wettkampf: ein Sprung, dann absichtlich ausscheiden
+// und an der Tafel mit ENTER die Gegner zu Ende springen lassen.
 function botInPage(kind) {
   const game = window.__game;
   const send = (type, code) => window.dispatchEvent(new KeyboardEvent(type, { code, key: code, bubbles: true }));
@@ -53,9 +55,16 @@ function botInPage(kind) {
   const LOGS = [38, 110, 176];
   const mem = { done: false, attempts: 0, holding: false, extended: false, planted: false, released: false, jumpCount: 0, inAir: false };
 
+  // Node setzt das Flag, wenn sein Zeitlimit greift – dann keine Tasten mehr schicken
+  window.__botStop = false;
   return new Promise((resolve) => {
     const started = performance.now();
     const timer = setInterval(() => {
+      if (window.__botStop) {
+        clearInterval(timer);
+        resolve({ ok: false, log: [...log, 'abgebrochen'] });
+        return;
+      }
       if (active('confirm')) return;
       if (active('result')) {
         clearInterval(timer);
@@ -82,12 +91,19 @@ function botInPage(kind) {
         tap(11);
         const next = HURDLES[p.nextHurdle];
         if (next !== undefined && p.air < 0 && next - p.x <= p.v * 0.22) press('Space');
-      } else if (kind === 'pole') {
+      } else if (kind === 'pole' || kind === 'pole-out') {
         const sc = game.scene.getScene('polevault');
+        const giveUp = kind === 'pole-out' && mem.attempts >= 2;
         if (sc.mode === 'board') {
+          if (kind === 'pole-out' && sc.player.vaulter.out) {
+            if (!mem.done) log.push('Ausgeschieden – ENTER: ZUM ERGEBNIS');
+            mem.done = true;
+            if (!sc.finished) press('Enter');
+            return;
+          }
           if (!sc.waitingForPlayer) return;
           // Zwei Sprünge reichen für den Test, danach wird der Wettkampf beendet
-          if (mem.attempts >= 2) {
+          if (kind === 'pole' && mem.attempts >= 2) {
             if (!mem.done) log.push('Wettkampf nach 2 Sprüngen beendet');
             mem.done = true;
             sc.finish();
@@ -107,7 +123,8 @@ function botInPage(kind) {
         }
         if (v.phase === 'ready' || v.phase === 'runup') {
           tap(11);
-          if (!mem.planted && v.phase === 'runup' && -v.x <= 4.05) {
+          // Zum Ausscheiden einfach nicht einstechen – durchgelaufen zählt als Fehlversuch
+          if (!giveUp && !mem.planted && v.phase === 'runup' && -v.x <= 4.05) {
             mem.planted = true;
             press('Space');
           }
@@ -191,6 +208,18 @@ function botInPage(kind) {
 
 // ------------------------------------------------------------------ Ablauf
 
+/** Bot im Browser mit Zeitlimit; danach wird er dort angehalten */
+async function runBot(page, kind) {
+  let timer;
+  const limit = new Promise((r) => {
+    timer = setTimeout(() => r({ ok: false, log: ['Zeitlimit (Node) erreicht'] }), TIMEOUT_MS);
+  });
+  const result = await Promise.race([page.evaluate(botInPage, kind), limit]);
+  clearTimeout(timer);
+  if (!result.ok) await page.evaluate(() => (window.__botStop = true)).catch(() => {});
+  return result;
+}
+
 async function waitForServer() {
   for (let i = 0; i < 100; i++) {
     try {
@@ -226,10 +255,7 @@ async function runDiscipline(browser, kind) {
   const started = Date.now();
   let result;
   try {
-    result = await Promise.race([
-      page.evaluate(botInPage, kind),
-      new Promise((r) => setTimeout(() => r({ ok: false, log: ['Zeitlimit (Node) erreicht'] }), TIMEOUT_MS)),
-    ]);
+    result = await runBot(page, kind);
   } finally {
     clearInterval(shooter);
   }
@@ -269,13 +295,32 @@ async function runCompetition(browser) {
   const check = (cond, msg) => {
     if (!cond) throw new Error(msg);
   };
+  // Laufende und pausierte Szenen, z. B. „medals:paused,confirm:running“
+  const scenes = () =>
+    page.evaluate(() =>
+      window.__game.scene.scenes
+        .filter((sc) => sc.sys.isActive() || sc.sys.isPaused())
+        .map((sc) => `${sc.scene.key}:${sc.sys.isPaused() ? 'paused' : 'running'}`)
+        .join(','),
+    );
+  // Zwei Tasten im selben Bild (beide landen in derselben Eingabe-Warteschlange)
+  const pressTogether = (a, b) =>
+    page.evaluate(([x, y]) => {
+      const send = (type, code) => window.dispatchEvent(new KeyboardEvent(type, { code, key: code, bubbles: true }));
+      for (const code of [x, y]) {
+        send('keydown', code);
+        send('keyup', code);
+      }
+    }, [a, b]);
 
   let ok = true;
   try {
     await page.goto(URL);
     await waitActive('title');
     // MODUS steht oben; PFEIL RECHTS schaltet auf WETTKAMPF
-    await page.keyboard.press('ArrowRight');
+    if ((await page.evaluate(() => window.__game.scene.getScene('title').mode)) !== 'competition') {
+      await page.keyboard.press('ArrowRight');
+    }
     await page.keyboard.press('ArrowDown');
     let st = await sceneState();
     check(st.selected === 2, `DISZIPLIN wurde nicht übersprungen (Zeile ${st.selected})`);
@@ -291,7 +336,17 @@ async function runCompetition(browser) {
 
     const order = [];
     for (let i = 0; i < 4; i++) {
-      await page.keyboard.press('Enter');
+      if (i === 1) {
+        // Fall A: ENTER und ESC im selben Bild – es geht weiter, ohne Rückfrage und ohne Restszene
+        await pressTogether('Enter', 'Escape');
+        await page.waitForFunction(() => window.__game.scene.isActive('longjump'), null, { timeout: 15_000 });
+        await page.waitForTimeout(500);
+        const s = await scenes();
+        check(s === 'longjump:running', `ENTER+ESC im Medaillenspiegel: ${s}`);
+        log.push('ENTER+ESC im selben Bild (Spiegel): nur die Disziplin läuft');
+      } else {
+        await page.keyboard.press('Enter');
+      }
       await page.waitForFunction(
         () => ['race', 'polevault', 'longjump', 'bmx'].some((k) => window.__game.scene.isActive(k)),
         null,
@@ -300,7 +355,8 @@ async function runCompetition(browser) {
       st = await sceneState();
       const scene = st.active.find((k) => k in BOT_OF_SCENE);
       order.push(scene);
-      const bot = BOT_OF_SCENE[scene];
+      // Im Wettkampf scheidet der Bot im Stabhochsprung echt aus (ENTER: ZUM ERGEBNIS)
+      const bot = scene === 'polevault' ? 'pole-out' : BOT_OF_SCENE[scene];
       if (scene === 'race') {
         // Rückfrage in der Startphase „FERTIG“: Die Zeit steht, es gibt keinen Startschuss und keinen Fehlstart
         await page.keyboard.press('Enter');
@@ -323,17 +379,59 @@ async function runCompetition(browser) {
         await page.waitForFunction(() => !window.__game.scene.isPaused('race'), null, { timeout: 5_000 });
         log.push('Rückfrage in „FERTIG“: Start angehalten, kein Fehlstart');
       }
-      const r = await Promise.race([
-        page.evaluate(botInPage, bot),
-        new Promise((res) => setTimeout(() => res({ ok: false, log: ['Zeitlimit (Node) erreicht'] }), TIMEOUT_MS)),
-      ]);
+      const botRun = runBot(page, bot);
+      if (scene === 'race') {
+        // Rückfrage mitten im Rennen: Rennzeit steht, kein Zeitsprung nach NEIN, kein Fehlstart
+        await page.waitForFunction(() => {
+          const sc = window.__game.scene.getScene('race');
+          return sc.phase === 'race' && sc.simTime > 2;
+        }, null, { timeout: 15_000 });
+        await page.keyboard.press('Escape');
+        await waitActive('confirm');
+        const t0 = await page.evaluate(() => window.__game.scene.getScene('race').simTime);
+        await page.waitForTimeout(1000);
+        const mid = await page.evaluate(() => {
+          const sc = window.__game.scene.getScene('race');
+          return { t: sc.simTime, paused: window.__game.scene.isPaused('race'), falseStarts: sc.falseStarts };
+        });
+        await page.keyboard.press('KeyN');
+        await page.waitForFunction(() => !window.__game.scene.isPaused('race') && !window.__game.scene.isActive('confirm'), null, {
+          timeout: 5_000,
+        });
+        const t1 = await page.evaluate(() => window.__game.scene.getScene('race').simTime);
+        check(mid.paused && mid.t === t0 && mid.falseStarts === 0, `Rennen läuft während der Rückfrage weiter: ${JSON.stringify(mid)}`);
+        check(t1 - t0 < 0.25, `Zeitsprung nach NEIN: ${t0.toFixed(3)} → ${t1.toFixed(3)} s`);
+        log.push(`Rückfrage im Rennen: Zeit stand bei ${t0.toFixed(2)} s, danach ${t1.toFixed(2)} s`);
+      }
+      const r = await botRun;
       for (const line of r.log) log.push(`${bot}: ${line}`);
       check(r.ok, `Bot ${bot} hat die Siegerehrung nicht erreicht`);
       await page.waitForTimeout(800);
       await shot(`${2 + i}-${bot}-result`);
-      await page.keyboard.press('Enter');
+      if (scene === 'polevault') {
+        // Nach dem Schnelldurchlauf hat der Champion eine gültige Höhe
+        const pv = await page.evaluate(() => {
+          const champ = window.__game.scene.getScene('medals').state.field.find((f) => f.profile === 2).code;
+          const rows = window.__game.scene.getScene('result').result.rows;
+          return { champ, rows: rows.map((row) => ({ code: row.country.code, valid: row.valid, text: row.cells[0].text })) };
+        });
+        log.push(`pole: ${pv.rows.map((row) => `${row.code} ${row.text}`).join(', ')}`);
+        const champ = pv.rows.find((row) => row.code === pv.champ);
+        check(champ && champ.valid, `Champion ${pv.champ} ohne gültige Höhe`);
+      }
       const mode = i < 3 ? 'between' : 'final';
-      await waitMedals(mode);
+      if (i === 0) {
+        // Fall B: ENTER und ESC im selben Bild in der Siegerehrung
+        await pressTogether('Enter', 'Escape');
+        await waitMedals(mode);
+        await page.waitForTimeout(500);
+        const s = await scenes();
+        check(s === 'medals:running', `ENTER+ESC in der Siegerehrung: ${s}`);
+        log.push('ENTER+ESC im selben Bild (Siegerehrung): nur der Spiegel läuft');
+      } else {
+        await page.keyboard.press('Enter');
+        await waitMedals(mode);
+      }
       await page.waitForTimeout(600);
       await shot(`${2 + i}-${bot}-${mode}`);
 
@@ -351,7 +449,18 @@ async function runCompetition(browser) {
           null,
           { timeout: 5_000 },
         );
-        log.push('Rückfrage: ESC öffnet sie, N setzt fort');
+        // Umgekehrt ESC und ENTER im selben Bild: Rückfrage offen, ENTER wirkt nicht mehr auf den Spiegel
+        await pressTogether('Escape', 'Enter');
+        await waitActive('confirm');
+        await page.waitForTimeout(300);
+        let s = await scenes();
+        check(s === 'medals:paused,confirm:running', `ESC+ENTER im Spiegel: ${s}`);
+        await page.keyboard.press('KeyN');
+        await page.waitForFunction(() => !window.__game.scene.isActive('confirm'), null, { timeout: 5_000 });
+        await page.waitForTimeout(200);
+        s = await scenes();
+        check(s === 'medals:running', `Nach N: ${s}`);
+        log.push('Rückfrage: ESC öffnet sie, N setzt fort (auch bei ESC+ENTER im selben Bild)');
       }
     }
     check(order.join(',') === 'race,longjump,polevault,bmx', `Falsche Reihenfolge: ${order.join(',')}`);
@@ -389,7 +498,8 @@ async function main() {
   fs.rmSync(OUT, { recursive: true, force: true });
   fs.mkdirSync(OUT, { recursive: true });
 
-  const server = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], { cwd: ROOT, stdio: 'ignore' });
+  // Eigene Prozessgruppe, damit am Ende auch der Vite-Kindprozess von npx beendet wird
+  const server = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], { cwd: ROOT, stdio: 'ignore', detached: true });
   let browser;
   const results = [];
   try {
@@ -405,7 +515,11 @@ async function main() {
     }
   } finally {
     if (browser) await browser.close();
-    server.kill();
+    try {
+      process.kill(-server.pid);
+    } catch {
+      server.kill();
+    }
   }
   fs.writeFileSync(path.join(OUT, 'summary.json'), JSON.stringify(results, null, 2));
   const failed = results.filter((r) => !r.ok);

@@ -7,10 +7,14 @@ import {
   medalsOf,
   overallWinners,
   placingOf,
+  playerStanding,
   recordEvent,
   type CompetitionState,
 } from './competition';
-import { createRng } from './cpu';
+import { BMX_CPU_PROFILES } from './bmx';
+import { CPU_PROFILES, createRng } from './cpu';
+import { LJ_CPU_PROFILES } from './longjump';
+import { VAULT_CPU_PROFILES } from './polevault';
 
 const POOL = ['GER', 'AUT', 'SUI', 'FRA', 'ITA', 'NED', 'ESP', 'SWE', 'POL', 'USA', 'JAM', 'JPN'];
 
@@ -240,5 +244,36 @@ describe('Medaillenspiegel – Grenzfälle (QA)', () => {
     s = recordEvent(s, '110h', order('ITA', 'FRA', 'AUT', 'GER'));
     expect(s.index).toBe(1);
     expect(medalTable(s).find((r) => r.code === 'GER')!.gold).toBe(1);
+  });
+});
+
+describe('Profile der Computer-Gegner', () => {
+  it('stehen in allen Disziplinen in derselben Reihenfolge (Index aus dem Feld)', () => {
+    for (const list of [CPU_PROFILES, LJ_CPU_PROFILES, VAULT_CPU_PROFILES, BMX_CPU_PROFILES]) {
+      expect(list.map((p) => p.name)).toEqual(['Rookie', 'Profi', 'Champion']);
+    }
+  });
+});
+
+describe('playerStanding', () => {
+  const none = ['GER', 'AUT', 'FRA', 'ITA'].map((code) => ({ code, valid: false }));
+
+  it('meldet „noch keine Medaillen“ statt einer geteilten Spitze', () => {
+    expect(playerStanding(fixed()).kind).toBe('noMedals');
+    expect(playerStanding(play(none, none, none, none)).kind).toBe('noMedals');
+  });
+
+  it('erkennt die alleinige Führung', () => {
+    expect(playerStanding(play(order('GER', 'AUT', 'FRA', 'ITA')))).toEqual({ kind: 'leader', rank: 1 });
+  });
+
+  it('erkennt den Gleichstand an der Spitze', () => {
+    const s = play(order('GER', 'AUT', 'FRA', 'ITA'), order('ITA', 'AUT', 'FRA', 'GER'));
+    expect(playerStanding(s)).toEqual({ kind: 'tied', rank: 1 });
+  });
+
+  it('nennt den Rang, wenn der Spieler zurückliegt – auch ohne eigene Medaille', () => {
+    expect(playerStanding(play(order('AUT', 'GER', 'FRA', 'ITA')))).toEqual({ kind: 'behind', rank: 2 });
+    expect(playerStanding(play(order('AUT', 'FRA', 'ITA', 'GER')))).toEqual({ kind: 'behind', rank: 4 });
   });
 });

@@ -24,10 +24,11 @@ import {
   medalsOf,
   overallWinners,
   placingOf,
+  playerStanding,
   type CompetitionState,
   type MedalRow,
 } from '../sim/competition';
-import { confirmAbort } from './ConfirmScene';
+import { confirmAbort, confirmPending } from './ConfirmScene';
 
 export type MedalsMode = 'intro' | 'between' | 'final';
 
@@ -62,6 +63,8 @@ export class MedalsScene extends Phaser.Scene {
   private elapsedMs = 0;
   private newMedals = 0;
   private shines = 0;
+  /** Szenenwechsel ist angestoßen – keine weiteren Tasten */
+  private leaving = false;
 
   constructor() {
     super('medals');
@@ -73,6 +76,7 @@ export class MedalsScene extends Phaser.Scene {
     this.elapsedMs = 0;
     this.newMedals = 0;
     this.shines = 0;
+    this.leaving = false;
   }
 
   create(): void {
@@ -92,7 +96,8 @@ export class MedalsScene extends Phaser.Scene {
     this.cameras.main.fadeIn(300, 16, 16, 28);
 
     const title = this.mode === 'intro' ? 'DIE NATIONEN' : this.mode === 'final' ? 'ENDSTAND' : 'MEDAILLENSPIEGEL';
-    const sub = this.mode === 'intro' ? 'WETTKAMPF ÜBER 4 DISZIPLINEN' : `NACH ${state.index} VON 4 DISZIPLINEN`;
+    const total = COMPETITION_ORDER.length;
+    const sub = this.mode === 'intro' ? `WETTKAMPF ÜBER ${total} DISZIPLINEN` : `NACH ${state.index} VON ${total} DISZIPLINEN`;
     this.text(GAME_WIDTH / 2, 10, title, 16, '#f7d038').setOrigin(0.5, 0);
     this.text(GAME_WIDTH / 2, 32, sub, 8, GREY).setOrigin(0.5, 0);
 
@@ -125,7 +130,7 @@ export class MedalsScene extends Phaser.Scene {
     const onKey = (ev: KeyboardEvent) => {
       sfx.unlock();
       // Tasten aus der vorigen Szene nicht übernehmen
-      if (ev.repeat || this.scene.isPaused() || (ev.timeStamp > 0 && ev.timeStamp < createdAt)) return;
+      if (ev.repeat || this.leaving || confirmPending() || (ev.timeStamp > 0 && ev.timeStamp < createdAt)) return;
       if (ev.code === 'Enter' || ev.code === 'NumpadEnter' || ev.code === 'Space') {
         sfx.confirm();
         this.proceed();
@@ -149,6 +154,7 @@ export class MedalsScene extends Phaser.Scene {
   }
 
   private proceed(): void {
+    this.leaving = true;
     if (this.mode === 'final') {
       endCompetition();
       this.scene.start('title');
@@ -233,20 +239,25 @@ export class MedalsScene extends Phaser.Scene {
       line1 = favorite ? `FAVORIT: ${countryByCode(favorite.code).name}` : '';
       line2 = 'JEDE DISZIPLIN NUR EIN DURCHGANG!';
     } else {
-      const myRow = this.table.find((r) => r.code === me)!;
-      const leaders = this.table.filter((r) => r.rank === 1);
+      const standing = playerStanding(s);
       if (this.mode === 'between' && this.lastEvent) {
         const name = eventByKey(this.lastEvent).name;
         const medal = medalsOf(s.results[this.lastEvent] ?? []).get(me);
         const label = { gold: 'GOLD', silver: 'SILBER', bronze: 'BRONZE' };
         line1 = medal ? `${name}: ${label[medal]} FÜR DICH!` : `${name}: KEINE MEDAILLE FÜR DICH`;
-        if (myRow.rank === 1 && leaders.length === 1) line2 = 'ZWISCHENSTAND: DU FÜHRST!';
-        else if (myRow.rank === 1) line2 = 'ZWISCHENSTAND: GLEICHAUF AN DER SPITZE';
-        else line2 = `ZWISCHENSTAND: DU BIST ${myRow.rank}. VON 4`;
+        line2 = {
+          noMedals: 'ZWISCHENSTAND: NOCH KEINE MEDAILLEN',
+          leader: 'ZWISCHENSTAND: DU FÜHRST!',
+          tied: 'ZWISCHENSTAND: GLEICHAUF AN DER SPITZE',
+          behind: `ZWISCHENSTAND: DU BIST ${standing.rank}. VON ${s.field.length}`,
+        }[standing.kind];
       } else {
-        if (this.winners.includes(me) && this.winners.length === 1) line1 = 'GLÜCKWUNSCH! DU HAST DIE SPIELE GEWONNEN!';
-        else if (this.winners.includes(me)) line1 = 'GEMEINSAM AN DER SPITZE – STARK!';
-        else line1 = `DU WIRST ${myRow.rank}. – AUF EIN NEUES!`;
+        line1 = {
+          noMedals: 'NIEMAND HOLT EINE MEDAILLE – AUF EIN NEUES!',
+          leader: 'GLÜCKWUNSCH! DU HAST DIE SPIELE GEWONNEN!',
+          tied: 'GEMEINSAM AN DER SPITZE – STARK!',
+          behind: `DU WIRST ${standing.rank}. – AUF EIN NEUES!`,
+        }[standing.kind];
       }
     }
     // Dunkles Band, damit die Bandenwerbung dahinter nicht stört

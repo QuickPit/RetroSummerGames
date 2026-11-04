@@ -9,7 +9,7 @@ import { drawFlag } from '../gfx/flags';
 import { cheerPose, drawRunner, wavePose, type RunnerLook } from '../gfx/runner';
 import { Stadium } from '../gfx/stadium';
 import { COMPETITION_ORDER, currentEvent, recordEvent } from '../sim/competition';
-import { confirmAbort } from './ConfirmScene';
+import { confirmAbort, confirmPending } from './ConfirmScene';
 
 export interface ResultCell {
   text: string;
@@ -53,6 +53,8 @@ export class ResultScene extends Phaser.Scene {
   private result!: ResultSceneData;
   private podiumGfx!: Phaser.GameObjects.Graphics;
   private elapsed = 0;
+  /** Szenenwechsel ist angestoßen – keine weiteren Tasten */
+  private leaving = false;
 
   constructor() {
     super('result');
@@ -61,6 +63,7 @@ export class ResultScene extends Phaser.Scene {
   init(data: ResultSceneData): void {
     this.result = data;
     this.elapsed = 0;
+    this.leaving = false;
   }
 
   create(): void {
@@ -81,7 +84,7 @@ export class ResultScene extends Phaser.Scene {
       this.add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, color });
 
     text(GAME_WIDTH / 2, 12, 'ERGEBNIS', 16, '#f7d038').setOrigin(0.5, 0);
-    const subtitle = competition ? `${event.name} – DISZIPLIN ${eventNo} VON 4` : event.name;
+    const subtitle = competition ? `${event.name} – DISZIPLIN ${eventNo} VON ${COMPETITION_ORDER.length}` : event.name;
     text(GAME_WIDTH / 2, 34, subtitle, 8, '#9aa0b8').setOrigin(0.5, 0);
 
     // Podest
@@ -146,18 +149,22 @@ export class ResultScene extends Phaser.Scene {
     const createdAt = performance.now();
     const onKey = (ev: KeyboardEvent) => {
       sfx.unlock();
-      if (ev.repeat || this.scene.isPaused()) return;
+      if (ev.repeat || this.leaving || confirmPending()) return;
       const state = getCompetition();
       // Im Wettkampf zählen nur Tasten, die erst in der Siegerehrung gedrückt wurden
       if (state && ev.timeStamp > 0 && ev.timeStamp < createdAt) return;
       if (ev.code === 'Enter' || ev.code === 'NumpadEnter' || ev.code === 'Space') {
         sfx.confirm();
+        this.leaving = true;
         // Im Wettkampf gibt es kein Nochmal – weiter zum Medaillenspiegel
         if (state) this.scene.start('medals', { mode: currentEvent(state) === null ? 'final' : 'between' });
         else this.scene.start(this.result.replay.scene, this.result.replay.data);
       } else if (ev.code === 'Escape') {
         if (state) confirmAbort(this);
-        else this.scene.start('title');
+        else {
+          this.leaving = true;
+          this.scene.start('title');
+        }
       } else if (ev.code === 'KeyM') {
         sfx.toggleMute();
       }

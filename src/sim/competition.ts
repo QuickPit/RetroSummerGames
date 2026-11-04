@@ -129,3 +129,19 @@ export function overallWinners(s: CompetitionState): string[] {
 export function placingOf(s: CompetitionState, event: EventKey, code: string): Placing | undefined {
   return s.results[event]?.find((p) => p.code === code);
 }
+
+export interface PlayerStanding {
+  /** noMedals = noch niemand hat eine Medaille, dann gibt es auch keine Spitze */
+  kind: 'noMedals' | 'leader' | 'tied' | 'behind';
+  rank: number;
+}
+
+/** Wo steht der Spieler im Medaillenspiegel? Grundlage für die Rückmeldung in `medals`. */
+export function playerStanding(s: CompetitionState): PlayerStanding {
+  const table = medalTable(s);
+  const code = s.field.find((f) => f.isPlayer)?.code;
+  const me = table.find((r) => r.code === code) ?? table[table.length - 1];
+  if (table.every((r) => r.total === 0)) return { kind: 'noMedals', rank: me.rank };
+  if (me.rank > 1) return { kind: 'behind', rank: me.rank };
+  return { kind: table.filter((r) => r.rank === 1).length === 1 ? 'leader' : 'tied', rank: 1 };
+}

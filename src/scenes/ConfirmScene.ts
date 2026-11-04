@@ -17,6 +17,13 @@ export interface ConfirmSceneData {
   onNo?: () => void;
 }
 
+/** Ist eine Rückfrage offen oder schon angefordert? Gilt sofort, nicht erst im nächsten Bild. */
+let pending = false;
+
+export function confirmPending(): boolean {
+  return pending;
+}
+
 const CHOICE_Y = 194;
 const CHOICE_X = { yes: 246, no: 350 };
 
@@ -74,7 +81,10 @@ export class ConfirmScene extends Phaser.Scene {
       }
     };
     kb.on('keydown', onKey);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => kb.off('keydown', onKey));
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      kb.off('keydown', onKey);
+      pending = false;
+    });
   }
 
   private refresh(): void {
@@ -92,32 +102,45 @@ export class ConfirmScene extends Phaser.Scene {
     if (choice === 'yes') {
       sfx.confirm();
       onYes?.();
-      this.scene.stop(parent);
+      // Alles beenden, was noch läuft oder pausiert ist – nicht nur die Szene darunter
+      for (const s of this.scene.manager.getScenes(false)) {
+        const key = s.scene.key;
+        if (key !== this.scene.key && (s.sys.isActive() || s.sys.isPaused() || s.sys.isSleeping())) this.scene.stop(key);
+      }
       this.scene.start(yesScene);
       return;
     }
     sfx.menu();
-    onNo?.();
-    this.scene.resume(parent);
+    // Nur eine wirklich pausierte Szene fortsetzen, nie eine bereits beendete
+    if (this.scene.isPaused(parent)) {
+      onNo?.();
+      this.scene.resume(parent);
+    }
     this.scene.stop();
   }
 }
 
 /**
- * Esc im Wettkampf: Szene pausieren und nachfragen. `onResume` erhält die
- * Pausendauer in ms, damit Zeitanker verschoben werden können.
+ * Esc im Wettkampf: Szene pausieren und nachfragen. `onResume` erhält beim
+ * Fortsetzen die Pausendauer in ms, damit Zeitanker verschoben werden können.
+ * Die aufrufende Szene darf noch keinen Szenenwechsel angestoßen haben.
  */
 export function confirmAbort(scene: Phaser.Scene, onResume?: (pausedMs: number) => void): void {
-  if (scene.scene.isPaused()) return;
+  if (pending || !scene.sys.isActive()) return;
+  pending = true;
   const pausedAt = performance.now();
   scene.scene.pause();
+  const events = scene.events;
+  // Pausieren und Fortsetzen wirken erst im nächsten Bild – gemessen wird bis zum echten Fortsetzen
+  const onResumed = () => onResume?.(performance.now() - pausedAt);
+  events.once(Phaser.Scenes.Events.RESUME, onResumed);
+  events.once(Phaser.Scenes.Events.SHUTDOWN, () => events.off(Phaser.Scenes.Events.RESUME, onResumed));
   const data: ConfirmSceneData = {
     parent: scene.scene.key,
     question: 'WETTKAMPF ABBRECHEN?',
     detail: 'DER SPIELSTAND GEHT VERLOREN.',
     yesScene: 'title',
     onYes: endCompetition,
-    onNo: () => onResume?.(performance.now() - pausedAt),
   };
   scene.scene.launch('confirm', data);
 }

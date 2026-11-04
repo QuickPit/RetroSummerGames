@@ -52,7 +52,7 @@ import {
   type RunnerState,
   type Side,
 } from '../sim/hurdles';
-import { confirmAbort } from './ConfirmScene';
+import { confirmAbort, confirmPending } from './ConfirmScene';
 import type { ResultRow, ResultSceneData } from './ResultScene';
 
 const SIM_DT = 1 / 120;
@@ -196,12 +196,15 @@ export class RaceScene extends Phaser.Scene {
 
   private onKeyDown(ev: KeyboardEvent): void {
     sfx.unlock();
-    if (ev.repeat || this.scene.isPaused()) return;
+    if (ev.repeat || confirmPending()) return;
     const competition = getCompetition() !== null;
 
     if (ev.code === 'Escape') {
       // Im Wettkampf mit Rückfrage; die Rennzeit läuft währenddessen nicht weiter
-      if (competition) confirmAbort(this, (ms) => (this.gunAt += ms));
+      if (competition) {
+        // Läuft schon der Wechsel zur Siegerehrung, gibt es keine Rückfrage mehr
+        if (!this.resultsShown) confirmAbort(this, (ms) => (this.gunAt += ms));
+      }
       else this.scene.start('title');
       return;
     }

@@ -25,7 +25,7 @@ import {
   type RiderState,
 } from '../sim/bmx';
 import type { Side } from '../sim/hurdles';
-import { confirmAbort } from './ConfirmScene';
+import { confirmAbort, confirmPending } from './ConfirmScene';
 import type { ResultRow, ResultSceneData } from './ResultScene';
 
 const SIM_DT = 1 / 120;
@@ -213,12 +213,14 @@ export class BmxScene extends Phaser.Scene {
     if (side === 'L') this.held.left = true;
     if (side === 'R') this.held.right = true;
     if (ev.code === 'Space') this.held.trick = true;
-    if (ev.repeat || this.scene.isPaused()) return;
+    if (ev.repeat || confirmPending()) return;
     const competition = getCompetition() !== null;
 
     if (ev.code === 'Escape') {
       // Gehaltene Tasten gelten nach der Rückfrage als losgelassen
-      if (competition) confirmAbort(this, () => (this.held = { left: false, right: false, trick: false }));
+      if (competition) {
+        if (!this.resultsShown) confirmAbort(this, () => (this.held = { left: false, right: false, trick: false }));
+      }
       else this.scene.start('title');
       return;
     }

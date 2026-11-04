@@ -47,7 +47,7 @@ import {
   type VaultState,
   type Vaulter,
 } from '../sim/polevault';
-import { confirmAbort } from './ConfirmScene';
+import { confirmAbort, confirmPending } from './ConfirmScene';
 import type { ResultRow, ResultSceneData } from './ResultScene';
 
 const SIM_DT = 1 / 120;
@@ -192,12 +192,16 @@ export class PoleVaultScene extends Phaser.Scene {
     this.showBoard(`${e.country.name} – ${attempt}. VERSUCH`, note);
     // Ist man selbst ausgeschieden, läuft der Rest zügiger durch
     const delay = this.player.vaulter.out ? 350 : 900;
+    // Nach dem Schnelldurchlauf nichts mehr eintragen – neue Timer überleben removeAllEvents()
     this.time.delayedCall(delay, () => {
+      if (this.finished) return;
       const ok = cpuAttempt(e.profile!, this.competition.height, Math.random);
       this.competition.record(vaulter, ok);
       sfx.board(ok);
       this.showBoard(`${e.country.name} – ${ok ? 'GÜLTIG!' : 'FEHLVERSUCH'}`, note);
-      this.time.delayedCall(delay * 0.7, () => this.nextTurn());
+      this.time.delayedCall(delay * 0.7, () => {
+        if (!this.finished) this.nextTurn();
+      });
     });
   }
 
@@ -319,10 +323,12 @@ export class PoleVaultScene extends Phaser.Scene {
 
   private onKeyDown(ev: KeyboardEvent): void {
     sfx.unlock();
-    if (ev.repeat || this.scene.isPaused()) return;
+    if (ev.repeat || confirmPending()) return;
     const competition = getCompetition() !== null;
     if (ev.code === 'Escape') {
-      if (competition) confirmAbort(this);
+      if (competition) {
+        if (!this.finished) confirmAbort(this);
+      }
       else this.scene.start('title');
       return;
     }

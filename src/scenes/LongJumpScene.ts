@@ -57,7 +57,7 @@ import {
   type LjEvent,
   type LjState,
 } from '../sim/longjump';
-import { confirmAbort } from './ConfirmScene';
+import { confirmAbort, confirmPending } from './ConfirmScene';
 import type { ResultRow, ResultSceneData } from './ResultScene';
 
 const SIM_DT = 1 / 120;
@@ -301,9 +301,11 @@ export class LongJumpScene extends Phaser.Scene {
 
   private onKeyDown(ev: KeyboardEvent): void {
     sfx.unlock();
-    if (ev.repeat || this.scene.isPaused()) return;
+    if (ev.repeat || confirmPending()) return;
     if (ev.code === 'Escape') {
-      if (getCompetition()) confirmAbort(this, () => this.releaseHeld());
+      if (getCompetition()) {
+        if (!this.finished) confirmAbort(this, () => this.releaseHeld());
+      }
       else this.scene.start('title');
       return;
     }
