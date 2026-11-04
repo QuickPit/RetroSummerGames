@@ -12,7 +12,7 @@ import {
   skewAt,
 } from '../config';
 import { COUNTRIES, countryByCode, type Country } from '../data/countries';
-import { getCompetition } from '../data/session';
+import { currentDifficulty, getCompetition } from '../data/session';
 import { loadLookSeed } from '../data/storage';
 import { drawFlag } from '../gfx/flags';
 import { JumpBoard, type JumpBoardRow } from '../gfx/jumpBoard';
@@ -37,16 +37,17 @@ import {
   type RunnerLook,
 } from '../gfx/runner';
 import { Stadium } from '../gfx/stadium';
+import { withForm } from '../sim/difficulty';
 import type { Side } from '../sim/hurdles';
 import {
   LJ,
-  LJ_CPU_PROFILES,
   ROUNDS,
   bestJump,
   cpuJump,
   createJump,
   createJumper,
   flightDuration,
+  jumpCpuProfiles,
   ljPress,
   ljRelease,
   ljTap,
@@ -164,7 +165,9 @@ export class LongJumpScene extends Phaser.Scene {
 
   private setupEntrants(): void {
     const others = Phaser.Utils.Array.Shuffle(COUNTRIES.filter((_, i) => i !== this.countryIndex));
-    const profiles = Phaser.Utils.Array.Shuffle([...LJ_CPU_PROFILES]);
+    // Je Teilnehmer einmal die Tagesform
+    const list = jumpCpuProfiles(currentDifficulty()).map((p) => withForm(p, Math.random));
+    const profiles = Phaser.Utils.Array.Shuffle([...list]);
     const country = COUNTRIES[this.countryIndex];
     // Im Wettkampf tritt immer dasselbe Feld an
     const field = getCompetition()?.field;
@@ -173,7 +176,7 @@ export class LongJumpScene extends Phaser.Scene {
     const opponents = field
       ? field
           .filter((f) => !f.isPlayer)
-          .map((f) => ({ country: countryByCode(f.code), seed: f.lookSeed, profile: LJ_CPU_PROFILES[f.profile ?? 0] }))
+          .map((f) => ({ country: countryByCode(f.code), seed: f.lookSeed, profile: list[f.profile ?? 0] }))
       : profiles.map((profile, i) => ({ country: others[i], seed: Math.floor(Math.random() * 1e9), profile }));
     const cpus: Entrant[] = opponents.map(({ country: c, seed: s, profile }, i) => ({
       country: c,

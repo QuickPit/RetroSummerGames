@@ -3,13 +3,14 @@ import { sfx } from '../audio/sfx';
 import { COLORS, FONT, GAME_WIDTH } from '../config';
 import type { Country } from '../data/countries';
 import { eventByKey, type EventKey } from '../data/events';
-import { getCompetition, setCompetition } from '../data/session';
+import { currentDifficulty, getCompetition, setCompetition } from '../data/session';
 import { loadBest, saveBest } from '../data/storage';
 import { drawFlag } from '../gfx/flags';
 import { SwimHall } from '../gfx/pool';
 import { cheerPose, drawRunner, wavePose, type RunnerLook } from '../gfx/runner';
 import { Stadium } from '../gfx/stadium';
 import { COMPETITION_ORDER, currentEvent, recordEvent } from '../sim/competition';
+import { DIFFICULTY_LABEL } from '../sim/difficulty';
 import { confirmAbort, confirmPending } from './ConfirmScene';
 
 export interface ResultCell {
@@ -101,7 +102,10 @@ export class ResultScene extends Phaser.Scene {
       this.add.text(x, y, s, { fontFamily: FONT, fontSize: `${size}px`, color });
 
     text(GAME_WIDTH / 2, 12, 'ERGEBNIS', 16, '#f7d038').setOrigin(0.5, 0);
-    const subtitle = competition ? `${event.name} – DISZIPLIN ${eventNo} VON ${COMPETITION_ORDER.length}` : event.name;
+    const opponents = `GEGNER: ${DIFFICULTY_LABEL[currentDifficulty()]}`;
+    const subtitle = competition
+      ? `${event.name} – DISZIPLIN ${eventNo} VON ${COMPETITION_ORDER.length} – ${opponents}`
+      : `${event.name} – ${opponents}`;
     text(GAME_WIDTH / 2, 34, subtitle, 8, '#9aa0b8').setOrigin(0.5, 0);
 
     // Podest

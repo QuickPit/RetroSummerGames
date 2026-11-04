@@ -15,7 +15,7 @@ import {
   skewAt,
 } from '../config';
 import { COUNTRIES, countryByCode, type Country } from '../data/countries';
-import { getCompetition } from '../data/session';
+import { currentDifficulty, getCompetition } from '../data/session';
 import { loadLookSeed } from '../data/storage';
 import { Hud } from '../gfx/hud';
 import {
@@ -35,7 +35,7 @@ import {
   type RunnerLook,
 } from '../gfx/runner';
 import { Stadium } from '../gfx/stadium';
-import { CPU_PROFILES, CpuController } from '../sim/cpu';
+import { CpuController, hurdleCpuProfiles } from '../sim/cpu';
 import {
   HURDLE_POSITIONS,
   PHYSICS,
@@ -151,7 +151,8 @@ export class RaceScene extends Phaser.Scene {
   private setupCompetitors(): void {
     const others = COUNTRIES.filter((_, i) => i !== this.countryIndex);
     Phaser.Utils.Array.Shuffle(others);
-    const profiles = Phaser.Utils.Array.Shuffle([...CPU_PROFILES]);
+    const list = hurdleCpuProfiles(currentDifficulty());
+    const profiles = Phaser.Utils.Array.Shuffle([...list]);
     // Im Wettkampf tritt immer dasselbe Feld an
     const field = getCompetition()?.field;
     const cpuField = field?.filter((f) => !f.isPlayer);
@@ -164,7 +165,7 @@ export class RaceScene extends Phaser.Scene {
       const state = createRunner();
       const seed = entry ? entry.lookSeed : isPlayer ? loadLookSeed() : Math.floor(Math.random() * 1e9);
       const look: RunnerLook = createLook(country, seed, lane + 1);
-      const profile = entry?.profile != null ? CPU_PROFILES[entry.profile] : profiles[cpuIndex % profiles.length];
+      const profile = entry?.profile != null ? list[entry.profile] : profiles[cpuIndex % profiles.length];
       const cpu = isPlayer ? null : new CpuController(state, profile, Math.random);
       if (!isPlayer) cpuIndex++;
       const c: Competitor = {

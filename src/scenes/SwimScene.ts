@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { sfx } from '../audio/sfx';
 import { CAMERA_LEAD_X, COLORS, GAME_WIDTH, LANE_COUNT, PX_PER_M, skewAt } from '../config';
 import { COUNTRIES, countryByCode, type Country } from '../data/countries';
-import { getCompetition } from '../data/session';
+import { currentDifficulty, getCompetition } from '../data/session';
 import { loadLookSeed } from '../data/storage';
 import { SwimHall, blockTopY, waterLineY } from '../gfx/pool';
 import { createLook, lerpPose, standPose, type Mood, type Pose, type RunnerLook } from '../gfx/runner';
@@ -27,7 +27,6 @@ import {
 import type { Side } from '../sim/hurdles';
 import {
   SWIM,
-  SWIM_CPU_PROFILES,
   SwimCpu,
   breathe,
   createSwimmer,
@@ -38,6 +37,7 @@ import {
   poolX,
   step,
   stroke,
+  swimCpuProfiles,
   taktRatio,
   toWall,
   type SwimEvent,
@@ -177,7 +177,8 @@ export class SwimScene extends Phaser.Scene {
   private setupCompetitors(): void {
     const others = COUNTRIES.filter((_, i) => i !== this.countryIndex);
     Phaser.Utils.Array.Shuffle(others);
-    const profiles = Phaser.Utils.Array.Shuffle([...SWIM_CPU_PROFILES]);
+    const list = swimCpuProfiles(currentDifficulty());
+    const profiles = Phaser.Utils.Array.Shuffle([...list]);
     // Im Wettkampf tritt immer dasselbe Feld an
     const field = getCompetition()?.field;
     const cpuField = field?.filter((f) => !f.isPlayer);
@@ -189,7 +190,7 @@ export class SwimScene extends Phaser.Scene {
       const country = isPlayer ? COUNTRIES[this.countryIndex] : entry ? countryByCode(entry.code) : others[cpuIndex];
       const state = createSwimmer();
       const seed = entry ? entry.lookSeed : isPlayer ? loadLookSeed() : Math.floor(Math.random() * 1e9);
-      const profile = entry?.profile != null ? SWIM_CPU_PROFILES[entry.profile] : profiles[cpuIndex % profiles.length];
+      const profile = entry?.profile != null ? list[entry.profile] : profiles[cpuIndex % profiles.length];
       const c: Competitor = {
         country,
         look: createLook(country, seed, lane + 1),

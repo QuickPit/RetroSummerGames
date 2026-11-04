@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { loadDifficulty, saveDifficulty } from '../data/storage';
 import { BMX_CPU_PROFILES, bmxCpuProfiles } from './bmx';
 import { CPU_PROFILES, createRng, hurdleCpuProfiles } from './cpu';
 import {
@@ -155,5 +156,44 @@ describe('Fabriken', () => {
       }
     }
     expect(bmxCpuProfiles('hard')[2].flipChance).toBeGreaterThan(bmxCpuProfiles('easy')[2].flipChance);
+  });
+});
+
+describe('Speicherung (rsg.difficulty)', () => {
+  const g = globalThis as { localStorage?: unknown };
+  afterEach(() => {
+    delete g.localStorage;
+  });
+
+  /** Kleiner Ersatz für localStorage in Node */
+  function stub(initial: Record<string, string> = {}): Map<string, string> {
+    const data = new Map(Object.entries(initial));
+    g.localStorage = {
+      getItem: (k: string) => data.get(k) ?? null,
+      setItem: (k: string, v: string) => void data.set(k, v),
+    };
+    return data;
+  }
+
+  it('ergibt ohne localStorage NORMAL', () => {
+    expect(g.localStorage).toBeUndefined();
+    expect(loadDifficulty()).toBe('normal');
+    expect(() => saveDifficulty('hard')).not.toThrow();
+  });
+
+  it('liest die gespeicherte Stufe, kaputte oder fehlende Werte ergeben NORMAL', () => {
+    stub({ 'rsg.difficulty': 'hard' });
+    expect(loadDifficulty()).toBe('hard');
+    stub({ 'rsg.difficulty': 'extrem' });
+    expect(loadDifficulty()).toBe('normal');
+    stub({});
+    expect(loadDifficulty()).toBe('normal');
+  });
+
+  it('schreibt die Wahl unter rsg.difficulty', () => {
+    const data = stub();
+    saveDifficulty('easy');
+    expect(data.get('rsg.difficulty')).toBe('easy');
+    expect(loadDifficulty()).toBe('easy');
   });
 });

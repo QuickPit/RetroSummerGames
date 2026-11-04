@@ -28,6 +28,7 @@ import {
   type CompetitionState,
   type MedalRow,
 } from '../sim/competition';
+import { DIFFICULTY_LABEL } from '../sim/difficulty';
 import { confirmAbort, confirmPending } from './ConfirmScene';
 
 export type MedalsMode = 'intro' | 'between' | 'final';
@@ -99,7 +100,8 @@ export class MedalsScene extends Phaser.Scene {
 
     const title = this.mode === 'intro' ? 'DIE NATIONEN' : this.mode === 'final' ? 'ENDSTAND' : 'MEDAILLENSPIEGEL';
     const total = COMPETITION_ORDER.length;
-    const sub = this.mode === 'intro' ? `WETTKAMPF ÜBER ${total} DISZIPLINEN` : `NACH ${state.index} VON ${total} DISZIPLINEN`;
+    const progress = this.mode === 'intro' ? `WETTKAMPF ÜBER ${total} DISZIPLINEN` : `NACH ${state.index} VON ${total} DISZIPLINEN`;
+    const sub = `${progress} – GEGNER: ${DIFFICULTY_LABEL[state.difficulty]}`;
     this.text(GAME_WIDTH / 2, 10, title, 16, '#f7d038').setOrigin(0.5, 0);
     this.text(GAME_WIDTH / 2, 32, sub, 8, GREY).setOrigin(0.5, 0);
 

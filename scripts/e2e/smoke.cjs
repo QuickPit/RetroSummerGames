@@ -5,6 +5,7 @@
 // Aufruf:  npm run e2e               (alle Disziplinen und der Wettkampf)
 //          npm run e2e -- bmx long   (nur ausgewählte)
 //          npm run e2e -- wettkampf  (ganzer Wettkampf über alle Disziplinen)
+//          npm run e2e -- leicht     (Gegner LEICHT über das Menü, dann Hürden)
 //
 // Nutzt das global installierte Playwright (siehe CLAUDE.md).
 
@@ -26,8 +27,11 @@ const DISCIPLINES = {
   bmx: { scene: 'bmx' },
   swim: { scene: 'swim' },
   dive: { scene: 'dive' },
+  // Gegnerstärke LEICHT über echte Tasten im Menü, gespielt wird mit dem Hürden-Bot
+  leicht: { scene: 'race', bot: 'hurdles', setup: setupEasy, check: checkEasy },
   wettkampf: { competition: true },
 };
+const ALLOWED_KEYS = ['rsg.mode', 'rsg.country', 'rsg.look', 'rsg.event', 'rsg.difficulty'];
 const BOT_OF_SCENE = { race: 'hurdles', polevault: 'pole', longjump: 'long', bmx: 'bmx', swim: 'swim', dive: 'dive' };
 
 // ---------------------------------------------------------------- Bot im Browser
@@ -419,19 +423,97 @@ async function waitForServer() {
   throw new Error(`Dev-Server unter ${URL} nicht erreichbar`);
 }
 
+const waitTitle = (page) =>
+  page.waitForFunction(() => window.__game && window.__game.scene.isActive('title'), null, { timeout: 15_000 });
+const titleState = (page) =>
+  page.evaluate(() => {
+    const t = window.__game.scene.getScene('title');
+    return { selected: t.selected, difficulty: t.difficulty, mode: t.mode, stored: localStorage.getItem('rsg.difficulty') };
+  });
+
+/** Im Menü mit PFEIL RUNTER die Zeile GEGNER (2) ansteuern */
+async function selectDifficultyRow(page) {
+  for (let i = 0; i < 6 && (await titleState(page)).selected !== 2; i++) await page.keyboard.press('ArrowDown');
+  const st = await titleState(page);
+  if (st.selected !== 2) throw new Error(`Zeile GEGNER nicht erreicht (Zeile ${st.selected})`);
+}
+
+// Lauf „leicht“: NORMAL → LEICHT mit PFEIL LINKS, Speicherung nach Neuladen prüfen
+async function setupEasy(page, log) {
+  await selectDifficultyRow(page);
+  let st = await titleState(page);
+  if (st.difficulty !== 'normal') throw new Error(`Start nicht auf NORMAL: ${JSON.stringify(st)}`);
+  await page.keyboard.press('ArrowLeft');
+  st = await titleState(page);
+  if (st.difficulty !== 'easy' || st.stored !== 'easy') throw new Error(`LEICHT nicht gewählt/gespeichert: ${JSON.stringify(st)}`);
+  await page.reload();
+  await waitTitle(page);
+  st = await titleState(page);
+  const value = await page.evaluate(() => window.__game.scene.getScene('title').values[2].text);
+  if (st.difficulty !== 'easy' || value !== 'LEICHT') throw new Error(`Nach Neuladen nicht LEICHT: ${JSON.stringify(st)}, Anzeige ${value}`);
+  // Für das Foto: Zeile GEGNER markiert, der Hilfekasten zeigt die Stufen
+  await selectDifficultyRow(page);
+  const help = await page.evaluate(() => window.__game.scene.getScene('title').helpKeys.map((t) => t.text));
+  if (help.join(',') !== 'LEICHT,NORMAL,SCHWER,PFEIL LINKS/RECHTS') throw new Error(`Hilfekasten GEGNER: ${help.join(', ')}`);
+  log.push('Menü: GEGNER = LEICHT gewählt, nach Neuladen gespeichert');
+}
+
+async function checkEasyField(page, log) {
+  await page.waitForFunction(() => {
+    const sc = window.__game.scene.getScene('race');
+    return window.__game.scene.isActive('race') && sc.competitors && sc.competitors.length > 0;
+  }, null, { timeout: 15_000 });
+  const rates = await page.evaluate(() =>
+    window.__game.scene
+      .getScene('race')
+      .competitors.filter((c) => c.cpu)
+      .map((c) => ({ profile: c.cpu.profile.tapRate, form: c.cpu.rate })),
+  );
+  log.push(`Gegner-Tipprate: ${rates.map((r) => `${r.profile.toFixed(1)} (Tagesform ${r.form.toFixed(2)})`).join(', ')}`);
+  if (rates.length !== 3 || rates.some((r) => r.profile > 7.35 || r.form > 7.35)) throw new Error(`Gegner zu schnell für LEICHT: ${JSON.stringify(rates)}`);
+}
+
+async function checkEasy(page, log) {
+  const texts = await page.evaluate(() =>
+    window.__game.scene.getScene('result').children.list.filter((o) => o.type === 'Text').map((t) => t.text),
+  );
+  const sub = texts.find((t) => t.includes('GEGNER:'));
+  if (sub !== '110 M HÜRDEN – GEGNER: LEICHT') throw new Error(`Unterzeile im Ergebnis: ${sub}`);
+  log.push(`Ergebnis: ${sub}`);
+  // Zurück ins Menü und wieder auf NORMAL stellen
+  await page.keyboard.press('Escape');
+  await waitTitle(page);
+  await selectDifficultyRow(page);
+  await page.keyboard.press('ArrowRight');
+  const st = await titleState(page);
+  if (st.difficulty !== 'normal' || st.stored !== 'normal') throw new Error(`Nicht zurück auf NORMAL: ${JSON.stringify(st)}`);
+  log.push('Menü: GEGNER zurück auf NORMAL');
+}
+
 async function runDiscipline(browser, kind) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   const errors = [];
+  const log = [];
+  const def = DISCIPLINES[kind];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(`console: ${m.text()}`);
   });
   await page.goto(URL);
-  await page.waitForFunction(() => window.__game && window.__game.scene.isActive('title'), null, { timeout: 15_000 });
+  await waitTitle(page);
+  try {
+    if (def.setup) await def.setup(page, log);
+  } catch (e) {
+    await page.screenshot({ path: path.join(OUT, `${kind}-error.png`) }).catch(() => {});
+    await page.close();
+    return { kind, ok: false, seconds: 0, log: [...log, `✗ ${e.message}`], errors };
+  }
   await page.screenshot({ path: path.join(OUT, `${kind}-0-title.png`) });
   await page.evaluate((scene) => {
     window.__game.scene.getScene('title').scene.start(scene, { countryIndex: 0 });
-  }, DISCIPLINES[kind].scene);
+  }, def.scene);
+  let checkError = null;
+  if (kind === 'leicht') await checkEasyField(page, log).catch((e) => (checkError = e));
 
   // Während der Bot spielt, regelmäßig Screenshots machen – und sofort, wenn der Bot einen anfordert
   let shot = 1;
@@ -449,15 +531,21 @@ async function runDiscipline(browser, kind) {
   const started = Date.now();
   let result;
   try {
-    result = await runBot(page, kind);
+    result = await runBot(page, def.bot || kind);
   } finally {
     clearInterval(shooter);
     clearInterval(requested);
   }
   await page.waitForTimeout(1500);
   await page.screenshot({ path: path.join(OUT, `${kind}-result.png`) });
+  if (result.ok && !checkError && def.check) await def.check(page, log).catch((e) => (checkError = e));
+  if (checkError) {
+    log.push(`✗ ${checkError.message}`);
+    await page.screenshot({ path: path.join(OUT, `${kind}-error.png`) }).catch(() => {});
+  }
   await page.close();
-  return { kind, ok: result.ok && errors.length === 0, seconds: Math.round((Date.now() - started) / 1000), log: result.log, errors };
+  const ok = result.ok && !checkError && errors.length === 0;
+  return { kind, ok, seconds: Math.round((Date.now() - started) / 1000), log: [...log, ...result.log], errors };
 }
 
 // Ganzer Wettkampf: Start über echte Tasten im Menü, dann alle Disziplinen
@@ -585,6 +673,10 @@ async function runCompetition(browser) {
     await page.keyboard.press('ArrowDown');
     let st = await sceneState();
     check(st.selected === 2, `DISZIPLIN wurde nicht übersprungen (Zeile ${st.selected})`);
+    // Zeile 2 ist GEGNER – auch im Wettkampf wählbar, Standard NORMAL
+    const title = await titleState(page);
+    check(title.difficulty === 'normal', `Wettkampf nicht auf NORMAL: ${JSON.stringify(title)}`);
+    await shot('0-title-gegner');
     await page.keyboard.press('ArrowUp');
     st = await sceneState();
     check(st.selected === 0, `Zurück nach oben landet auf Zeile ${st.selected}`);
@@ -594,6 +686,16 @@ async function runCompetition(browser) {
     await waitMedals('intro');
     await page.waitForTimeout(600);
     await shot('1-intro');
+    const intro = await page.evaluate(() => {
+      const m = window.__game.scene.getScene('medals');
+      return { difficulty: m.state.difficulty, texts: m.children.list.filter((o) => o.type === 'Text').map((t) => t.text) };
+    });
+    check(intro.difficulty === 'normal', `Wettkampf-Stufe ${intro.difficulty} statt normal`);
+    check(
+      intro.texts.includes('WETTKAMPF ÜBER 6 DISZIPLINEN – GEGNER: NORMAL'),
+      `Intro-Unterzeile fehlt: ${intro.texts.filter((t) => t.includes('DISZIPLINEN')).join(' | ')}`,
+    );
+    log.push('Medaillenspiegel: GEGNER: NORMAL, Stufe im Wettkampf festgeschrieben');
 
     const order = [];
     const room = () => page.evaluate(async () => (await import('/src/audio/sfx.ts')).sfx.currentRoom);
@@ -831,7 +933,7 @@ async function runCompetition(browser) {
     check(!(await page.evaluate(() => window.__game.scene.isActive('ceremony'))), 'Abschlussfeier läuft nach ENTER weiter');
     const keys = await page.evaluate(() => Object.keys(localStorage));
     check(
-      keys.every((k) => ['rsg.mode', 'rsg.country', 'rsg.look', 'rsg.event'].includes(k) || k.startsWith('rsg.best.')),
+      keys.every((k) => ALLOWED_KEYS.includes(k) || k.startsWith('rsg.best.')),
       `Unerwartete localStorage-Schlüssel: ${keys.join(', ')}`,
     );
     log.push('Zurück im Menü (Wettkampf beendet)');

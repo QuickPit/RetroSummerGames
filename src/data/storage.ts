@@ -1,6 +1,8 @@
 // Kleine Hilfen für localStorage – das Spiel muss auch ohne funktionieren
 // (z. B. im privaten Modus).
 
+import { DEFAULT_DIFFICULTY, isDifficulty, type Difficulty } from '../sim/difficulty';
+
 function read(key: string): string | null {
   try {
     return localStorage.getItem(key);
@@ -76,4 +78,14 @@ export function loadMode(): GameMode {
 
 export function saveMode(mode: GameMode): void {
   write('rsg.mode', mode);
+}
+
+/** Menüwahl GEGNER – unbekannte oder fehlende Werte ergeben NORMAL */
+export function loadDifficulty(): Difficulty {
+  const raw = read('rsg.difficulty');
+  return isDifficulty(raw) ? raw : DEFAULT_DIFFICULTY;
+}
+
+export function saveDifficulty(d: Difficulty): void {
+  write('rsg.difficulty', d);
 }
