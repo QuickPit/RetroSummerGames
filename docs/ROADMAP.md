@@ -29,6 +29,12 @@ Der `/sprint`-Ablauf nimmt immer den **obersten offenen** Punkt (`[ ]`), setzt i
   *Abnahme:* alle Disziplinen in fester Reihenfolge spielbar; Medaillenspiegel korrekt (Unit-Test der
   Zählung inkl. Gleichstand); Spielstand überlebt keinen Neustart der Seite (bewusst einfach);
   Spieltest-Bot spielt einen kompletten Wettkampf.
+  Aufgeteilt in zwei Sprints:
+  - [ ] **RSG-01a Ablauf und Medaillenspiegel** – Menüzeile MODUS, feste Reihenfolge, Medaillenspiegel
+    nach jeder Siegerehrung, Esc mit Rückfrage, schlichter Endstand mit Gesamtsieger, Bot spielt den
+    ganzen Wettkampf, Unit-Test der Zählung.
+  - [ ] **RSG-01b Große Abschlussfeier** – animierte Feier für den Gesamtsieger (Podest der Nationen,
+    Flaggen, Feuerwerk, jubelndes Publikum) statt des schlichten Endstands.
 
 - [ ] **RSG-02 Schwierigkeitsgrad**
   Menüzeile **GEGNER: LEICHT / NORMAL / SCHWER**, gespeichert in localStorage. Skaliert die Profile
