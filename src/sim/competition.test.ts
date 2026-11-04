@@ -201,3 +201,44 @@ describe('recordEvent', () => {
     expect(placingOf(s, 'long', 'GER')).toBeUndefined();
   });
 });
+
+describe('Medaillenspiegel – Grenzfälle (QA)', () => {
+  it('zählt über alle Disziplinen genau die Podeste, ungültige Plätze ohne Nachrücken', () => {
+    const s = play(
+      order('GER', 'AUT', 'FRA', 'ITA'),
+      [
+        { code: 'AUT', valid: true },
+        { code: 'GER', valid: false },
+        { code: 'FRA', valid: false },
+        { code: 'ITA', valid: false },
+      ],
+      order('ITA', 'FRA', 'GER', 'AUT'),
+      [
+        { code: 'FRA', valid: true },
+        { code: 'ITA', valid: true },
+        { code: 'AUT', valid: false },
+        { code: 'GER', valid: false },
+      ],
+    );
+    const byCode = Object.fromEntries(medalTable(s).map((r) => [r.code, [r.gold, r.silver, r.bronze]]));
+    expect(byCode).toEqual({ GER: [1, 0, 1], AUT: [1, 1, 0], FRA: [1, 1, 1], ITA: [1, 1, 0] });
+    expect(medalTable(s).reduce((n, r) => n + r.total, 0)).toBe(9);
+  });
+
+  it('vergibt bei zwei Gleichständen die Ränge 1, 1, 3, 3', () => {
+    const s = play(order('GER', 'AUT', 'FRA', 'ITA'), order('ITA', 'FRA', 'AUT', 'GER'));
+    expect(medalTable(s).map((r) => [r.code, r.rank])).toEqual([
+      ['GER', 1],
+      ['ITA', 1],
+      ['AUT', 3],
+      ['FRA', 3],
+    ]);
+  });
+
+  it('nimmt nur Ergebnisse auf, wenn die Disziplin an der Reihe ist (kein Doppeleintrag nach Wiederholung)', () => {
+    let s = play(order('GER', 'AUT', 'FRA', 'ITA'));
+    s = recordEvent(s, '110h', order('ITA', 'FRA', 'AUT', 'GER'));
+    expect(s.index).toBe(1);
+    expect(medalTable(s).find((r) => r.code === 'GER')!.gold).toBe(1);
+  });
+});

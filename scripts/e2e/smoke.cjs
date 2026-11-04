@@ -301,6 +301,28 @@ async function runCompetition(browser) {
       const scene = st.active.find((k) => k in BOT_OF_SCENE);
       order.push(scene);
       const bot = BOT_OF_SCENE[scene];
+      if (scene === 'race') {
+        // Rückfrage in der Startphase „FERTIG“: Die Zeit steht, es gibt keinen Startschuss und keinen Fehlstart
+        await page.keyboard.press('Enter');
+        await page.waitForFunction(() => window.__game.scene.getScene('race').phase === 'set', null, { timeout: 5_000 });
+        await page.keyboard.press('Escape');
+        await waitActive('confirm');
+        const before = await page.evaluate(() => window.__game.scene.getScene('race').phaseTimer);
+        await page.keyboard.press('ArrowLeft');
+        await page.keyboard.press('ArrowRight');
+        await page.waitForTimeout(2500);
+        const during = await page.evaluate(() => {
+          const sc = window.__game.scene.getScene('race');
+          return { phase: sc.phase, timer: sc.phaseTimer, falseStarts: sc.falseStarts, paused: window.__game.scene.isPaused('race') };
+        });
+        check(
+          during.paused && during.phase === 'set' && during.timer === before && during.falseStarts === 0,
+          `Hürden laufen während der Rückfrage weiter: ${JSON.stringify(during)}`,
+        );
+        await page.keyboard.press('KeyN');
+        await page.waitForFunction(() => !window.__game.scene.isPaused('race'), null, { timeout: 5_000 });
+        log.push('Rückfrage in „FERTIG“: Start angehalten, kein Fehlstart');
+      }
       const r = await Promise.race([
         page.evaluate(botInPage, bot),
         new Promise((res) => setTimeout(() => res({ ok: false, log: ['Zeitlimit (Node) erreicht'] }), TIMEOUT_MS)),
