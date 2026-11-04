@@ -332,3 +332,85 @@ describe('Computer-Gegner und Balancing', () => {
     }
   });
 });
+
+describe('Grenzfälle (QA)', () => {
+  it('wertet keine Züge während Rolle, Wand und Anschlag – merkt sich aber die Seite', () => {
+    const { s, t } = inWater();
+    s.d = SWIM.poolLength - 1;
+    s.v = 2;
+    stroke(s, 'L', t);
+    expect(flipTurn(s, t + 0.2)).toBe(true);
+    const strokes = s.strokes;
+    expect(stroke(s, 'R', t + 0.25)).toBeNull();
+    expect(s.lastSide).toBe('R');
+    run(s, t, t + 0.4);
+    expect(s.phase === 'wall' || s.phase === 'flip').toBe(true);
+    expect(stroke(s, 'L', t + 0.45)).toBeNull();
+    expect(s.strokes).toBe(strokes);
+    expect(breathe(s)).toBe(false);
+
+    // Anschlagen ohne Rolle: ebenfalls keine Züge
+    const o = inWater();
+    o.s.d = SWIM.poolLength - 0.05;
+    o.s.v = 2;
+    run(o.s, o.t, o.t + 0.1);
+    expect(o.s.phase).toBe('open');
+    expect(stroke(o.s, 'L', o.t + 0.2)).toBeNull();
+    expect(flipTurn(o.s, o.t + 0.2)).toBe(false);
+    expect(o.s.strokes).toBe(0);
+  });
+
+  it('gibt nach dem Abstoß sofort einen vollen Zug (Armzyklen zurückgesetzt)', () => {
+    const { s, t } = inWater();
+    s.d = SWIM.poolLength - idealTurnDistance(2);
+    s.v = 2;
+    stroke(s, 'L', t - 0.05);
+    flipTurn(s, t);
+    const { t: after } = run(s, t, t + SWIM.flipTime + 2 * DT);
+    expect(s.phase).toBe('swim');
+    expect(s.turned).toBe(true);
+    // Unmittelbar nach dem Abstoß: R kommt zuerst (L war zuletzt), dann L – beide voll
+    expect(stroke(s, 'R', after)).toBe('full');
+    expect(stroke(s, 'L', after + 0.01)).toBe('full');
+  });
+
+  it('wirkt genau an der Grenze der Wendezone (3,0 m), nicht im Startsprung', () => {
+    const d = createSwimmer();
+    dive(d, 0);
+    expect(flipTurn(d, 0.1)).toBe(false);
+    const { s, t } = inWater();
+    s.d = SWIM.poolLength - SWIM.turnZone;
+    s.v = 2;
+    expect(flipTurn(s, t)).toBe(true);
+    expect(s.turnRating).toBe('early');
+  });
+
+  it('nimmt nach dem Anschlag im Ziel keine Eingaben mehr an', () => {
+    const { s } = inWater();
+    s.turned = true;
+    s.d = SWIM.distance - 0.01;
+    s.v = 2;
+    step(s, DT, 40);
+    expect(s.finishTime).not.toBeNull();
+    const ft = s.finishTime;
+    expect(stroke(s, 'R', 40.2)).toBeNull();
+    expect(breathe(s)).toBe(false);
+    expect(flipTurn(s, 40.2)).toBe(false);
+    run(s, 40, 42);
+    expect(s.finishTime).toBe(ft);
+    expect(s.d).toBe(SWIM.distance);
+  });
+
+  it('ist deterministisch: gleiche Eingaben ergeben die gleiche Zeit', () => {
+    for (const p of SWIM_CPU_PROFILES) {
+      expect(simulateRace(p, 4242).finishTime).toBe(simulateRace(p, 4242).finishTime);
+    }
+  });
+
+  it('hält Hämmern in jeder Stärke deutlich hinter ruhigen 10/s', () => {
+    const calm = average(model(10, 0.1), 10, 11).avg;
+    for (const rate of [13, 16, 20, 25, 30, 40]) {
+      expect(average(model(rate, 0.1), 10, 11).avg).toBeGreaterThan(calm + 3);
+    }
+  });
+});
