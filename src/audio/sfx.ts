@@ -6,6 +6,8 @@ class Sfx {
   private noise: AudioBuffer | null = null;
   private crowdGain: GainNode | null = null;
   private crowdSource: AudioBufferSourceNode | null = null;
+  /** Geplante, noch nicht verklungene Töne – für stopAll() */
+  private readonly live = new Set<AudioScheduledSourceNode>();
   muted = false;
 
   constructor() {
@@ -57,6 +59,25 @@ class Sfx {
     osc.connect(gain).connect(this.master);
     osc.start(t);
     osc.stop(t + dur + 0.02);
+    this.track(osc);
+  }
+
+  private track(node: AudioScheduledSourceNode): void {
+    this.live.add(node);
+    node.onended = () => this.live.delete(node);
+  }
+
+  /** Bricht alle geplanten Töne ab (z. B. die Melodie beim Verlassen einer Szene) und lässt das Publikum verstummen. */
+  stopAll(): void {
+    for (const node of this.live) {
+      try {
+        node.stop();
+      } catch {
+        // schon beendet
+      }
+    }
+    this.live.clear();
+    this.crowd(0);
   }
 
   private burst(dur: number, vol: number, filterFreq: number, type: BiquadFilterType = 'lowpass', delay = 0): void {
@@ -73,6 +94,7 @@ class Sfx {
     src.connect(filter).connect(gain).connect(this.master);
     src.start(t, Math.random() * 1.5);
     src.stop(t + dur + 0.02);
+    this.track(src);
   }
 
   menu(): void {
@@ -134,6 +156,54 @@ class Sfx {
     const base = [1319, 1568, 1976][Math.max(0, Math.min(2, step))];
     this.tone(base, 0.05, 'square', 0.05);
     this.tone(base * 1.5, 0.12, 'triangle', 0.09, undefined, 0.05);
+  }
+
+  // ---- Abschlussfeier
+
+  /**
+   * Eigene Siegermelodie der Abschlussfeier (keine echte Hymne): ein feierlicher Marsch in C-Dur,
+   * 4 Takte zu je 4 Schlägen, Tempo 112 – gut 8 s. Liefert die Dauer in Sekunden.
+   */
+  victoryTheme(): number {
+    const beat = 60 / 112;
+    // [Melodie, zweite Stimme (Halbtöne über C5), Länge in Schlägen] – 4 Takte à 4 Schläge
+    const melody: [number, number, number][] = [
+      [0, -5, 0.75], [0, -5, 0.25], [4, 0, 1], [7, 4, 1], [4, 0, 0.5], [7, 4, 0.5],
+      [9, 5, 1.5], [7, 4, 0.5], [5, 2, 1], [2, -1, 1],
+      [4, 0, 0.75], [4, 0, 0.25], [7, 4, 1], [12, 7, 1], [11, 7, 0.5], [9, 5, 0.5],
+      [7, 2, 0.75], [5, -1, 0.25], [4, 0, 0.5], [2, -1, 0.5], [0, -8, 2],
+    ];
+    const note = (semi: number) => 523.25 * Math.pow(2, semi / 12);
+    let t = 0;
+    for (const [semi, second, len] of melody) {
+      this.tone(note(semi), len * beat * 0.92, 'square', 0.085, undefined, t);
+      this.tone(note(second), len * beat * 0.9, 'square', 0.035, undefined, t);
+      t += len * beat;
+    }
+    // Bass im Marschschritt (Grundton/Quinte je Schlag): C – F G – C – G C
+    const bass = [0, 7, 0, 7, 5, 0, 7, 2, 0, 7, 4, 7, 7, 2, 0, 0];
+    bass.forEach((semi, i) => {
+      if (i < 15) this.tone(note(semi - 24), beat * (i === 14 ? 1.8 : 0.8), 'triangle', 0.16, undefined, i * beat);
+      // Kleine Trommel auf 2 und 4
+      if (i % 2 === 1 && i < 13) this.burst(0.08, 0.1, 2500, 'highpass', i * beat);
+    });
+    // Wirbel in den Schlussakkord
+    for (let k = 0; k < 8; k++) this.burst(0.05, 0.04 + k * 0.01, 3000, 'highpass', 13 * beat + k * beat * 0.125);
+    return t;
+  }
+
+  /** Rakete steigt auf: leises Zischen mit steigendem Pfeifton */
+  fireworkLaunch(): void {
+    this.burst(0.5, 0.04, 4000, 'highpass');
+    this.tone(700 + Math.random() * 300, 0.55, 'triangle', 0.018, 1800);
+  }
+
+  /** Explosion am Himmel – gedämpft, weil fern; `big` für die großen Salven */
+  fireworkBang(big = false): void {
+    this.burst(big ? 0.7 : 0.45, big ? 0.28 : 0.18, 500);
+    this.tone(90, 0.3, 'triangle', big ? 0.2 : 0.12, 40);
+    // Knistern der Funken
+    for (let i = 0; i < 4; i++) this.burst(0.03, 0.05, 5000, 'highpass', 0.25 + Math.random() * 0.5);
   }
 
   // ---- Stabhochsprung

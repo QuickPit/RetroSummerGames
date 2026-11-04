@@ -6,7 +6,7 @@ diesmal per Tastatur.
 
 **Spielen:** https://quickpit.github.io/RetroSummerGames/
 
-## Aktueller Stand (v0.6 – Einzelspieler)
+## Aktueller Stand (v0.7 – Einzelspieler)
 
 Vier Disziplinen gegen drei Computer-Gegner (Rookie, Profi, Champion). Im Startbildschirm wählst du
 mit **↑ / ↓** die Zeile (Modus, Disziplin, Nation, Athlet) und änderst sie mit **← / →**.
@@ -21,6 +21,8 @@ Menüzeile **MODUS: WETTKAMPF** – alle vier Disziplinen nacheinander in fester
   gleiche Medaillen = gleicher Platz) und die Steuerung der nächsten Disziplin.
 - Medaillen gibt es nur für gültige Leistungen auf Platz 1–3 – wer z. B. im Weitsprung nur Fehlversuche hat, geht leer aus, und niemand rückt nach.
 - Am Ende steht der **Endstand** mit Gesamtsieger (bei Gleichstand gewinnen mehrere Nationen gemeinsam).
+- Danach führt **Enter** zur **Abschlussfeier**: Nachtstadion, Podest der besten drei Nationen mit Flaggen,
+  der Gesamtsieger stemmt den Pokal, eigene Siegermelodie, Feuerwerk und Konfetti. Enter = zurück ins Menü.
 - **Esc** fragt nach („WETTKAMPF ABBRECHEN?“) und pausiert solange das Spiel – die Zeit läuft nicht weiter.
 - Der Spielstand wird bewusst nicht gespeichert: Neu laden = neuer Wettkampf. Persönliche Bestleistungen zählen aber auch hier.
 
@@ -134,7 +136,7 @@ src/
   sim/        Reine Spiellogik ohne Grafik (Hürden, Stabhochsprung, Weitsprung, BMX, Wettkampf, Gegner) – getestet
   gfx/        Prozedurale Grafik: Athleten, BMX-Rad, Stadion, Strand, Flaggen, HUD
   audio/      Per Web Audio synthetisierte Soundeffekte
-  scenes/     Phaser-Szenen: Titel, Hürdenlauf, Stabhochsprung, Weitsprung, BMX, Ergebnis, Medaillenspiegel, Rückfrage
+  scenes/     Phaser-Szenen: Titel, Hürdenlauf, Stabhochsprung, Weitsprung, BMX, Ergebnis, Medaillenspiegel, Abschlussfeier, Rückfrage
   data/       Disziplinen, Nationen, lokale Speicherung (Bestleistungen, Auswahl) und Wettkampf-Spielstand (nur im Speicher)
 scripts/e2e/  Automatischer Spieltest (Bot je Disziplin)
 docs/         Roadmap und Design-Spezifikationen

@@ -3,6 +3,19 @@
 Was sich für Spieler ändert – neueste Version oben. Hier lässt sich auch ohne Rückfragen nachlesen,
 was das Agenten-Team umgesetzt und welche Entscheidungen es getroffen hat.
 
+## 0.7.0 – Große Abschlussfeier
+
+- Nach dem Endstand des Wettkampfs geht es mit Enter zur Abschlussfeier: Nachtstadion mit Flutlicht und
+  Suchscheinwerfern, Podest der drei besten Nationen, Flaggen werden während einer eigenen Siegermelodie
+  gehisst, der Gesamtsieger stemmt den Pokal, Feuerwerk in fünf Formen, Konfettikanonen und Blitzlichter im Publikum.
+- Gleichstand im Medaillenspiegel = geteilte Stufe auf dem Podest; ohne jede Medaille gibt es nur Feuerwerk
+  („DIE SPIELE SIND BEENDET“) und keine Siegermelodie.
+- Entscheidungen des Teams:
+  - Der Endstand bleibt als Übersicht stehen, die Feier folgt danach (Esc im Endstand überspringt sie).
+  - Die Feier lässt sich erst nach 0,8 s beenden, damit man sie nicht versehentlich wegdrückt.
+  - Das Feuerwerk läuft mit festem Zeitschritt – gleich schön bei 60 Hz und 144 Hz.
+- Fix: Nach dem Wettkampf läuft kein Publikumsrauschen mehr im Menü weiter; Fanfare und Siegermelodie überlagern sich nicht.
+
 ## 0.6.0 – Wettkampf „Die Spiele“
 
 - Neue Menüzeile **MODUS: EINZELDISZIPLIN / WETTKAMPF**. Im Wettkampf spielst du alle vier Disziplinen

@@ -35,3 +35,9 @@ export const COUNTRIES: readonly Country[] = [
 export function countryByCode(code: string): Country {
   return COUNTRIES.find((c) => c.code === code) ?? COUNTRIES[0];
 }
+
+/** Siegertext: eine Nation mit vollem Namen, mehrere als Codes („GER UND JAM“, „FRA, JAM UND USA“). */
+export function winnersLabel(codes: readonly string[]): string {
+  if (codes.length === 1) return countryByCode(codes[0]).name;
+  return `${codes.slice(0, -1).join(', ')} UND ${codes[codes.length - 1]}`;
+}

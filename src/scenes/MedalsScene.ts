@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { sfx } from '../audio/sfx';
 import { FONT, GAME_WIDTH } from '../config';
-import { COUNTRIES, countryByCode } from '../data/countries';
+import { COUNTRIES, countryByCode, winnersLabel } from '../data/countries';
 import { eventByKey, type EventKey } from '../data/events';
 import { endCompetition, getCompetition } from '../data/session';
 import { drawFlag } from '../gfx/flags';
@@ -109,7 +109,7 @@ export class MedalsScene extends Phaser.Scene {
     const prompt = this.text(
       GAME_WIDTH / 2,
       330,
-      this.mode === 'final' ? 'ENTER: ZURÜCK ZUM MENÜ' : 'ENTER: WEITER   ESC: ABBRECHEN',
+      this.mode === 'final' ? 'ENTER: ABSCHLUSSFEIER' : 'ENTER: WEITER   ESC: ABBRECHEN',
       8,
       '#f7d038',
     ).setOrigin(0.5, 0);
@@ -132,10 +132,13 @@ export class MedalsScene extends Phaser.Scene {
       // Tasten aus der vorigen Szene nicht übernehmen
       if (ev.repeat || this.leaving || confirmPending() || (ev.timeStamp > 0 && ev.timeStamp < createdAt)) return;
       if (ev.code === 'Enter' || ev.code === 'NumpadEnter' || ev.code === 'Space') {
+        // Vor der Feier die Fanfare des Endstands stoppen, damit sie sich nicht mit der Siegermelodie überlagert
+        if (this.mode === 'final') sfx.stopAll();
         sfx.confirm();
         this.proceed();
       } else if (ev.code === 'Escape') {
-        if (this.mode === 'final') this.proceed();
+        // Im Endstand überspringt ESC die Feier und führt direkt ins Menü
+        if (this.mode === 'final') this.toMenu();
         else confirmAbort(this);
       } else if (ev.code === 'KeyM') {
         sfx.toggleMute();
@@ -156,8 +159,7 @@ export class MedalsScene extends Phaser.Scene {
   private proceed(): void {
     this.leaving = true;
     if (this.mode === 'final') {
-      endCompetition();
-      this.scene.start('title');
+      this.scene.start('ceremony');
       return;
     }
     const next = currentEvent(this.state);
@@ -167,6 +169,13 @@ export class MedalsScene extends Phaser.Scene {
     }
     const countryIndex = Math.max(0, COUNTRIES.findIndex((c) => c.code === this.playerCode()));
     this.scene.start(eventByKey(next).scene, { countryIndex });
+  }
+
+  private toMenu(): void {
+    this.leaving = true;
+    sfx.stopAll();
+    endCompetition();
+    this.scene.start('title');
   }
 
   private drawTable(): void {
@@ -301,11 +310,7 @@ export class MedalsScene extends Phaser.Scene {
     winners.forEach((code, i) => {
       drawFlag(g, countryByCode(code).flag, GAME_WIDTH / 2 - total / 2 + i * (flagW + gap), BOX.y + 30, flagW, 22);
     });
-    const name =
-      winners.length === 1
-        ? countryByCode(winners[0]).name
-        : `${winners.slice(0, -1).join(', ')} UND ${winners[winners.length - 1]}`;
-    this.text(GAME_WIDTH / 2, BOX.y + 64, name, 16, '#f7c843').setOrigin(0.5, 0);
+    this.text(GAME_WIDTH / 2, BOX.y + 64, winnersLabel(winners), 16, '#f7c843').setOrigin(0.5, 0);
   }
 
   update(_time: number, deltaMs: number): void {

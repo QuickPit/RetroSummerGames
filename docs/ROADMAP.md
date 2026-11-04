@@ -25,7 +25,7 @@ Der `/sprint`-Ablauf nimmt immer den **obersten offenen** Punkt (`[ ]`), setzt i
 
 ### Priorität 1 – Spiel abrunden
 
-- [ ] **RSG-01 Wettkampfmodus „Die Spiele“**
+- [x] **RSG-01 Wettkampfmodus „Die Spiele“** (v0.6.0 + v0.7.0)
   Im Menü neue Zeile **MODUS: EINZELDISZIPLIN / WETTKAMPF**. Im Wettkampf werden alle Disziplinen
   nacheinander gespielt; nach jeder Siegerehrung geht es mit ENTER zur nächsten. Medaillenspiegel
   nach Nationen (Gold vor Silber vor Bronze) zwischen den Disziplinen und am Ende eine große
@@ -37,7 +37,7 @@ Der `/sprint`-Ablauf nimmt immer den **obersten offenen** Punkt (`[ ]`), setzt i
   - [x] **RSG-01a Ablauf und Medaillenspiegel** (v0.6.0) – Menüzeile MODUS, feste Reihenfolge, Medaillenspiegel
     nach jeder Siegerehrung, Esc mit Rückfrage, schlichter Endstand mit Gesamtsieger, Bot spielt den
     ganzen Wettkampf, Unit-Test der Zählung.
-  - [ ] **RSG-01b Große Abschlussfeier** – animierte Feier für den Gesamtsieger (Podest der Nationen,
+  - [x] **RSG-01b Große Abschlussfeier** (v0.7.0) – animierte Feier für den Gesamtsieger (Podest der Nationen,
     Flaggen, Feuerwerk, jubelndes Publikum) statt des schlichten Endstands.
 
 - [ ] **RSG-02 Schwierigkeitsgrad**
@@ -107,12 +107,14 @@ Der `/sprint`-Ablauf nimmt immer den **obersten offenen** Punkt (`[ ]`), setzt i
 - [ ] **RSG-14 Performance und Ladezeit**
   Phaser in eigenen Chunk auslagern, Ladeanzeige, 60 FPS auf schwächeren Geräten prüfen
   (Graphics-Neuzeichnung pro Frame reduzieren, wo es viel kostet).
+  Aus RSG-01b: Athleten der Abschlussfeier kosten ~5 ms/Bild – Posen sind periodisch, also je Athlet
+  12–16 Phasenbilder als Spritesheet vorrendern.
 
 ## Erledigt
 
 - [x] 110 m Hürden (v0.1) · Liebevollere Athleten (v0.2) · Stabhochsprung + Menü (v0.3) ·
   BMX am Strand (v0.4) · Weitsprung (v0.5) · Agenten-Team und automatischer Spieltest (v0.5.1) ·
-  Wettkampf mit Medaillenspiegel – RSG-01a (v0.6.0)
+  Wettkampf mit Medaillenspiegel – RSG-01a (v0.6.0) · Abschlussfeier – RSG-01b (v0.7.0)
 
 ## Offene Fragen an den Owner
 
