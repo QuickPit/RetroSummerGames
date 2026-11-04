@@ -83,7 +83,7 @@ export class ConfirmScene extends Phaser.Scene {
     this.noText.setColor(yes ? '#ffffff' : '#f7d038');
     const g = this.markerGfx;
     g.clear();
-    drawChoiceMarker(g, (yes ? CHOICE_X.yes : CHOICE_X.no) - 14, CHOICE_Y);
+    drawChoiceMarker(g, (yes ? CHOICE_X.yes : CHOICE_X.no) - 14, CHOICE_Y, (yes ? this.yesText : this.noText).width);
   }
 
   private answer(choice: 'yes' | 'no'): void {
