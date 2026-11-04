@@ -104,7 +104,7 @@ export class ResultScene extends Phaser.Scene {
     text(GAME_WIDTH / 2, 12, 'ERGEBNIS', 16, '#f7d038').setOrigin(0.5, 0);
     const opponents = `GEGNER: ${DIFFICULTY_LABEL[currentDifficulty()]}`;
     const subtitle = competition
-      ? `${event.name} – DISZIPLIN ${eventNo} VON ${COMPETITION_ORDER.length} – ${opponents}`
+      ? `${event.name} – ${eventNo}/${COMPETITION_ORDER.length} – ${opponents}`
       : `${event.name} – ${opponents}`;
     text(GAME_WIDTH / 2, 34, subtitle, 8, '#9aa0b8').setOrigin(0.5, 0);
 

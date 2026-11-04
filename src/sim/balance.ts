@@ -1,9 +1,10 @@
 // Balancing-Werkzeug: ganze Wettbewerbe einer Disziplin ohne Grafik, in denen auch der
 // „Spieler“ ein Profil aus derselben Fabrik ist ({rate, error}). Grundlage der Zielwerte in
-// difficulty.balance.test.ts – das Spiel selbst importiert diese Datei nicht.
+// difficulty.balance.*.test.ts – das Spiel selbst importiert diese Datei nicht.
 
 import { BmxCpu, bmxCpuProfile, createRider, startRider, stepRider, totalScore } from './bmx';
-import { CpuController, hurdleCpuProfile } from './cpu';
+import { COMPETITION_ORDER, ceremonyPodium, createCompetition, overallWinners, recordEvent } from './competition';
+import { CpuController, createRng, hurdleCpuProfile } from './cpu';
 import { DIFFICULTY_SCALE, withForm, type CpuSkill, type Difficulty } from './difficulty';
 import { cpuDiveRate, diveById, diveCpuProfile, DIVE_CPU_DIVES, simulateCpuDive, type DiveId } from './dive';
 import { createRunner, step } from './hurdles';
@@ -153,4 +154,78 @@ export function hasMedal(o: EventOutcome, index = 0): boolean {
 
 export function hasGold(o: EventOutcome, index = 0): boolean {
   return o.valid[index] && placeOf(o, index) === 1;
+}
+
+// ------------------------------------------------------- Zeilen der Zieltabellen
+
+export interface BalanceRow {
+  d: Difficulty;
+  player: Entrant;
+  seed: number;
+}
+
+/** Turm-Sprunglisten der Spieler-Modelle (die 3 mit dem besten Erwartungswert) */
+export const PLAYER_DIVES = {
+  steady: ['15s2', '35h', '25p'],
+  good: ['35h', '45h', '15s2'],
+  perfect: ['45h', '35h', '25p'],
+} as const satisfies Record<string, readonly DiveId[]>;
+
+export type RowOutcomes = Record<BalanceEvent, EventOutcome[]>;
+
+/** Alle 6 Disziplinen einer Zeile, je `runs` Wettbewerbe mit festem Seed */
+export function simulateRow(row: BalanceRow, runs: number): RowOutcomes {
+  const result = {} as RowOutcomes;
+  for (const ev of BALANCE_EVENTS) {
+    const run = eventRunner(ev, versusField(row.player, row.d));
+    const rng = createRng(row.seed * 100 + BALANCE_EVENTS.indexOf(ev));
+    result[ev] = Array.from({ length: runs }, () => run(rng));
+  }
+  return result;
+}
+
+/** Medaillen- und Goldquote des Spielers je Disziplin */
+export function quotas(all: RowOutcomes): Record<BalanceEvent, { medal: number; gold: number }> {
+  const rate = (list: EventOutcome[], f: (o: EventOutcome) => boolean) => list.filter(f).length / list.length;
+  return Object.fromEntries(
+    BALANCE_EVENTS.map((ev) => [ev, { medal: rate(all[ev], (o) => hasMedal(o)), gold: rate(all[ev], (o) => hasGold(o)) }]),
+  ) as Record<BalanceEvent, { medal: number; gold: number }>;
+}
+
+/** Ø Leistung von Rookie/Profi/Champion je Disziplin (ungültige zählen nicht) */
+export function opponentMeans(all: RowOutcomes): Record<BalanceEvent, number[]> {
+  return Object.fromEntries(
+    BALANCE_EVENTS.map((ev) => [
+      ev,
+      [1, 2, 3].map((i) => {
+        const v = all[ev].map((o) => o.values[i]).filter((x): x is number => x !== null);
+        return v.reduce((a, b) => a + b, 0) / v.length;
+      }),
+    ]),
+  ) as Record<BalanceEvent, number[]>;
+}
+
+/** Wettkämpfe aus zufällig kombinierten Rängen je Disziplin: Podest und Gesamtsieg des Spielers */
+export function competitionRates(all: RowOutcomes, d: Difficulty, n = 2000): { podium: number; win: number } {
+  const codes = ['P', 'R', 'F', 'C'];
+  const rng = createRng(4242);
+  let podium = 0;
+  let win = 0;
+  for (let k = 0; k < n; k++) {
+    let s = createCompetition('P', codes, rng, 1, d);
+    for (const ev of COMPETITION_ORDER) {
+      const list = all[ev];
+      const o = list[Math.floor(rng() * list.length)];
+      // Teilnehmer i tritt immer für dieselbe Nation an
+      s = recordEvent(s, ev, o.order.map((i) => ({ code: codes[i], valid: o.valid[i] })));
+    }
+    if (ceremonyPodium(s).some((g) => g.codes.includes('P'))) podium++;
+    if (overallWinners(s).includes('P')) win++;
+  }
+  return { podium: podium / n, win: win / n };
+}
+
+/** Ø Rookie < Profi < Champion? Bei Zeiten ist kleiner besser. */
+export function strongerIsBetter(ev: BalanceEvent, m: readonly number[]): boolean {
+  return ev === '110h' || ev === 'swim' ? m[0] > m[1] && m[1] > m[2] : m[0] < m[1] && m[1] < m[2];
 }

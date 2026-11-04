@@ -1,4 +1,4 @@
-import { cpuField, cpuJitter, cpuReaction, type CpuSkill, type Difficulty } from './difficulty';
+import { cpuField, cpuJitter, cpuReaction, formFactor, type CpuSkill, type Difficulty } from './difficulty';
 import { HURDLE_POSITIONS, PHYSICS, isAirborne, isFinished, jump, tap, type RunnerState, type Side } from './hurdles';
 
 export interface CpuProfile {
@@ -59,7 +59,7 @@ export class CpuController {
     private readonly rng: () => number,
   ) {
     // Jeder Lauf ist etwas anders – auch Computer haben gute und schlechte Tage.
-    this.rate = profile.tapRate * (0.95 + 0.1 * rng());
+    this.rate = profile.tapRate * formFactor(rng);
     this.nextTapAt = profile.reaction * (0.85 + 0.3 * rng());
   }
 

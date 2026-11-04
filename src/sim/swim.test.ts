@@ -499,7 +499,9 @@ describe('Fixrunde nach Review', () => {
     for (const p of [model(15, 0.12, { breathAt: -1 }), model(18, 0.12, { breathAt: -1 }), model(25, 0, { breathAt: -1 })]) {
       expect(average(p, 40, 500).max).toBeLessThan(90);
     }
-    // Atmen lohnt sich trotzdem deutlich
-    expect(average(model(10, 0.12, { breathAt: -1 }), 40, 7).avg).toBeGreaterThan(average(model(10, 0.12), 40, 7).avg + 3);
+    // Atmen lohnt sich trotzdem deutlich: bei 10/s etwa 4 s (Entscheidung RSG-02)
+    const gain = average(model(10, 0.12, { breathAt: -1 }), 40, 7).avg - average(model(10, 0.12), 40, 7).avg;
+    expect(gain).toBeGreaterThan(3.5);
+    expect(gain).toBeLessThan(4.6);
   });
 });

@@ -2,7 +2,7 @@
 // gemessen), Atmen, Rollwende an der 50-m-Wand und Anschlag im Ziel.
 
 import { createRng, gaussian } from './cpu';
-import { cpuField, cpuJitter, cpuReaction, type CpuSkill, type Difficulty } from './difficulty';
+import { cpuField, cpuJitter, cpuReaction, formFactor, type CpuSkill, type Difficulty } from './difficulty';
 import type { Side } from './hurdles';
 
 export const SWIM = {
@@ -46,8 +46,8 @@ export const SWIM = {
   breathTime: 0.4,
   breathSpeedFactor: 0.9,
   gaspSpeedFactor: 0.5,
-  /** Luftschnappen: so lange kein Vortrieb – lang genug, dass sich Atmen auch mit der Tempo-Kurve lohnt */
-  gaspStun: 0.7,
+  /** Luftschnappen: so lange kein Vortrieb – Atmen bringt bei 10/s so etwa 4 s */
+  gaspStun: 0.9,
   /** Wende: Leertaste wirkt erst so nah an der Wand */
   turnZone: 3.0,
   /** Dauer der Rolle in Sekunden */
@@ -498,7 +498,7 @@ export class SwimCpu {
     private readonly rng: () => number,
   ) {
     // Jeder Lauf ist etwas anders
-    this.rate = profile.tapRate * (0.95 + 0.1 * rng());
+    this.rate = profile.tapRate * formFactor(rng);
     this.reaction = profile.reaction * (0.85 + 0.3 * rng());
   }
 

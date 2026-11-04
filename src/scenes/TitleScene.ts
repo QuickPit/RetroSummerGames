@@ -3,11 +3,10 @@ import { sfx } from '../audio/sfx';
 import { COLORS, FONT, GAME_WIDTH } from '../config';
 import { COUNTRIES } from '../data/countries';
 import { EVENTS } from '../data/events';
-import { endCompetition, setCompetition } from '../data/session';
+import { endCompetition, menuDifficulty, setCompetition, setDifficulty } from '../data/session';
 import {
   loadBest,
   loadCountryIndex,
-  loadDifficulty,
   loadEventIndex,
   loadLookSeed,
   loadMode,
@@ -76,7 +75,7 @@ export class TitleScene extends Phaser.Scene {
     // Kein Publikumsrauschen aus Siegerehrung oder Feier im Menü (Töne wie der Bestätigungston laufen aus)
     sfx.crowd(0);
     this.mode = loadMode();
-    this.difficulty = loadDifficulty();
+    this.difficulty = menuDifficulty();
     this.eventIndex = loadEventIndex() % EVENTS.length;
     this.countryIndex = loadCountryIndex() % COUNTRIES.length;
     this.lookSeed = loadLookSeed();
@@ -168,6 +167,7 @@ export class TitleScene extends Phaser.Scene {
     } else if (this.selected === ROW.event) this.eventIndex = wrap(this.eventIndex, EVENTS.length);
     else if (this.selected === ROW.difficulty) {
       this.difficulty = DIFFICULTIES[wrap(DIFFICULTIES.indexOf(this.difficulty), DIFFICULTIES.length)];
+      setDifficulty(this.difficulty);
       saveDifficulty(this.difficulty);
     }
     else if (this.selected === ROW.nation) this.countryIndex = wrap(this.countryIndex, COUNTRIES.length);
@@ -182,6 +182,7 @@ export class TitleScene extends Phaser.Scene {
     saveCountryIndex(this.countryIndex);
     saveLookSeed(this.lookSeed);
     saveMode(this.mode);
+    setDifficulty(this.difficulty);
     saveDifficulty(this.difficulty);
     if (this.mode === 'competition') {
       // Die Stufe gilt ab jetzt für den ganzen Wettkampf

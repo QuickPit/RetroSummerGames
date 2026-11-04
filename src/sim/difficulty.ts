@@ -33,7 +33,7 @@ export const DIFFICULTY_SCALE = {
 
 export const CPU_NAMES = ['Rookie', 'Profi', 'Champion'] as const;
 
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+export const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 export function isDifficulty(v: unknown): v is Difficulty {
   return (DIFFICULTIES as readonly unknown[]).includes(v);
@@ -49,9 +49,14 @@ export function cpuReaction(error: number): number {
   return clamp(0.135 + 0.165 * error, 0.15, 0.4);
 }
 
-/** Tagesform: Tipprate × 0,95–1,05 – auch Computer haben gute und schlechte Tage */
+/** Tagesform als Faktor 0,95–1,05 – auch Computer haben gute und schlechte Tage */
+export function formFactor(rng: () => number): number {
+  return 0.95 + 0.1 * rng();
+}
+
+/** Profil mit Tagesform: Tipprate × 0,95–1,05 */
 export function withForm<P extends { tapRate: number }>(p: P, rng: () => number): P {
-  return { ...p, tapRate: p.tapRate * (0.95 + 0.1 * rng()) };
+  return { ...p, tapRate: p.tapRate * formFactor(rng) };
 }
 
 /** Die drei Gegner einer Stufe, je Disziplin über `make` in ein Profil übersetzt */

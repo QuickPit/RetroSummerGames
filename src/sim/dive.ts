@@ -3,7 +3,7 @@
 // der fünf Kampfrichter. Ohne Phaser, damit sie testbar ist.
 
 import { createRng, gaussian } from './cpu';
-import { CPU_NAMES, DIFFICULTY_SCALE, cpuJitter, type CpuSkill, type Difficulty } from './difficulty';
+import { cpuField, cpuJitter, formFactor, type CpuSkill, type Difficulty } from './difficulty';
 import type { Side } from './hurdles';
 
 export const DIVE = {
@@ -669,7 +669,7 @@ export function diveCpuProfile({ rate, error }: CpuSkill, name: string, dives: r
 
 /** Die drei Gegner einer Stufe (Rookie/Profi/Champion) */
 export function diveCpuProfiles(d: Difficulty): DiveCpuProfile[] {
-  return DIFFICULTY_SCALE[d].map((skill, i) => diveCpuProfile(skill, CPU_NAMES[i], DIVE_CPU_DIVES[d][i]));
+  return cpuField(d, (skill, name, i) => diveCpuProfile(skill, name, DIVE_CPU_DIVES[d][i]));
 }
 
 // Reihenfolge Rookie/Profi/Champion – wird in competition.test.ts geprüft!
@@ -677,7 +677,7 @@ export const DIVE_CPU_PROFILES: readonly DiveCpuProfile[] = diveCpuProfiles('nor
 
 /** Tipprate eines Gegners für einen Wettkampf – auch Computer haben gute und schlechte Tage. */
 export function cpuDiveRate(p: DiveCpuProfile, rng: () => number): number {
-  return p.tapRate * (0.95 + 0.1 * rng());
+  return p.tapRate * formFactor(rng);
 }
 
 /** Zielt beim Öffnen so viele Grad vor das Ziel – das Ausrichten erledigt den Rest */

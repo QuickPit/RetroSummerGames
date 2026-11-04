@@ -228,7 +228,8 @@ Die Tagesform gibt es heute schon bei Hürden, Schwimmen und Turm. Neu kommt sie
 - `cpuAttempt(p, bar, rng)` vergleicht `peak ≥ bar + clearance`. Die Höhe hängt nicht von der Latte ab, also läuft je Versuch genau ein Sprung.
 - **Einstiegshöhe** `vaultOpening(p)`: Ø von 40 Probesprüngen mit festem Seed (`createRng(7)`), minus 0,45 m,
   abgerundet auf die nächste Höhe aus `HEIGHTS` (mindestens 3,80). Das wird einmal beim Erzeugen des Profils berechnet.
-  Gemessen ohne gültige Höhe: LEICHT-Rookie 2,9 %, alle anderen 0 %.
+  Ergibt LEICHT 3,80 / 3,80 / 4,20, NORMAL 4,20 / 4,60 / 5,00, SCHWER 4,80 / 5,10 / 5,30.
+  Gemessen ohne gültige Höhe: LEICHT-Rookie ~15 %, alle anderen 0 % (siehe Abweichungen).
 
 ### Stufen (`DIFFICULTY_SCALE`)
 
@@ -399,7 +400,7 @@ endet bei 308, und ENTER beginnt bei 318.
 | Ort | Text (8 px, grau wie bisher) |
 |---|---|
 | Ergebnis, Einzelmodus | `110 M HÜRDEN – GEGNER: LEICHT` |
-| Ergebnis, Wettkampf | `100 M FREISTIL – DISZIPLIN 4 VON 6 – GEGNER: SCHWER` (max. 51 Zeichen = 408 px) |
+| Ergebnis, Wettkampf | `100 M FREISTIL – 4/6 – GEGNER: SCHWER` (max. 37 Zeichen = 296 px, linker Rand ≥ 160 px wegen der Hallenuhr) |
 | Medaillenspiegel Intro | `WETTKAMPF ÜBER 6 DISZIPLINEN – GEGNER: NORMAL` |
 | Medaillenspiegel danach | `NACH 3 VON 6 DISZIPLINEN – GEGNER: NORMAL` |
 
@@ -509,7 +510,7 @@ bleiben als NORMAL erhalten, sodass `competition.test.ts` (Namensreihenfolge) we
 |---|---|
 | `hurdles.test.ts` | Höchstgeschwindigkeit 9,55. Rennzeiten NORMAL Ø 15,2 / 14,2 / 13,4, also Champion > 12 und Rookie < 18. |
 | `longjump.test.ts` | Ein Test für „schneller = weiter“ bleibt. Gegner-Test über `jumpCpuProfiles`: Ø NORMAL 6,9 / 7,6 / 8,4 m, geordnet, Übertreten 8–25 %. |
-| `polevault.test.ts` | 10/s perfekt ergibt Ø 5,9 m, also die Spanne 5,0–6,0 auf **5,5–6,2** setzen. Neu: Mit gleichem Timing hängt die Höhe nicht davon ab, wann zwischen zwei Tipps eingestochen wird (Spanne ≤ 0,1 m). Neu: `vaultOpening` NORMAL = 4,40 / 4,80 / 5,20. |
+| `polevault.test.ts` | 10/s perfekt ergibt Ø 5,9 m, also die Spanne 5,0–6,0 auf **5,5–6,2** setzen. Neu: Mit gleichem Timing hängt die Höhe nicht davon ab, wann zwischen zwei Tipps eingestochen wird (Spanne ≤ 0,1 m). Neu: `vaultOpening` NORMAL = 4,20 / 4,60 / 5,00. |
 | `swim.test.ts` | Gegner NORMAL Ø 52,3 / 50,1 / 48,4, also Spannen 51–54 / 49–51,5 / 47,5–49,5. „10/s schneller als Hämmern 13/s“ bleibt. |
 | `dive.test.ts` | Schwung: 8/s → 0,88–0,95, 11/s → ≥ 0,99. Gegner NORMAL Ø ~176 / 200 / 227. Die Spieler-Modell-Tests (8/s, 11/s, 14/s, Weltrekord) neu einmessen; Aussagen bleiben, Zahlen ändern sich. |
 | `bmx.test.ts` | Gegner-Ordnung bleibt. „Gutes Tempo sturzfrei“ mit 8/s prüfen. |
@@ -589,6 +590,22 @@ bleiben als NORMAL erhalten, sodass `competition.test.ts` (Namensreihenfolge) we
   der Zeile NATION bei der neuen Zeilenhöhe) und den Hilfekasten mit der grauen bzw. gelben Hervorhebung.
 - Optional: drei kleine Stärke-Balken (1/2/3, grün/gelb/rot, je 3×8 px) rechts neben dem Wert der GEGNER-Zeile
   als zusätzliches Retro-Signal. Das gehört nicht zur Abnahme.
+
+## Abweichungen in der Umsetzung (v0.10.0)
+
+Nachgemessen mit den echten Sims (`src/sim/balance.ts`, 300 Wettbewerbe je Zeile). Die Medaillen- und
+Goldquoten der Tabellen oben werden getroffen. Abweichungen und Entscheidungen des Producers:
+
+| # | Punkt | Umsetzung |
+|---|---|---|
+| A1 | **Stab, absolute Höhen** | Mit `plantError 0,05·e` liegen die Höhen bei Fehlerfaktor 1 um 0,1–0,2 m unter der Soll-Tabelle (8/s: 5,13 statt 5,29 m; Gegner NORMAL Ø 4,72 / 5,13 / 5,56 m). Nahezu perfektes Timing trifft sie (10/s: 5,88 m). Spieler und Gegner sind gleich betroffen, die Quoten stimmen. Die Einstiegshöhen folgen der Formel: **NORMAL 4,20 / 4,60 / 5,00** (oben korrigiert). |
+| A2 | **Stab, LEICHT-Rookie** | Er bleibt in **~15 %** der Wettbewerbe ohne gültige Höhe (Einstieg 3,80 m bei Ø-Sprung ~3,8 m). Akzeptiert: Er ist ein Einsteiger-Gegner. |
+| A3 | **Schwimmen, Luftschnappen** | Mit der gesättigten Kurve ist verlorenes Tempo schneller wieder da, Atmen brachte nur noch ~3 s. Entscheidung: Atmen soll spürbar lohnen, `gaspStun` 0,6 → **0,9 s** (`gaspSpeedFactor` bleibt 0,5). Vorteil Atmen gegenüber Nicht-Atmen (100 Läufe): 6/s 2,7 s · 8/s 3,5 s · **10/s 4,0 s** · 12/s 3,7 s. Die Gegner atmen bei 25 % Luft und schnappen nie nach Luft, die Balance bleibt unverändert. |
+| A4 | **Turm, Fehlsprünge der Gegner** | Die Listen aus `DIVE_CPU_DIVES` wagen früh den 3½-Salto. Fehlsprünge je Serie (200 Serien): LEICHT 0,47 / 0,48 / 0,38, NORMAL 0,42 / 0,26 / 0,24, SCHWER 0,17 / 0,09 / 0,01. Testgrenzen je Stufe: LEICHT 0,7, NORMAL 0,6, SCHWER 0,3. |
+| A5 | **Turm, Sprunglisten** | Nachgemessen sind die Listen die besten drei nach Erwartungswert, mit zwei knappen Ausnahmen innerhalb von 5 Punkten: LEICHT-Profi (25h ist 4., 3,4 Punkte hinter 35h) und NORMAL-Champion (45h ist 4., 0,7 hinter 25p). Ein Test prüft die Toleranz. |
+| A6 | **Weltrekorde der Gegner auf SCHWER** | In 23 % der Hürdenrennen, 15 % der Weitsprung- und 4 % der Turm-Wettbewerbe unterbietet mindestens ein Gegner den Weltrekord (NORMAL: nie). Akzeptiert, denn SCHWER heißt Weltklasse. Die Meldung `WELTREKORD!` gilt weiter nur für den Spieler (`ResultScene` prüft nur `playerScore`). |
+| A7 | **Unterzeile im Ergebnis** | Die lange Form überlappte bei Schwimmen und Turm die Hallenuhr. Kurzform `<DISZIPLIN> – 4/6 – GEGNER: <STUFE>`; der Spieltest prüft je Ergebnis, dass sie bei x ≥ 160 beginnt. Der Medaillenspiegel steht im Stadion ohne Uhr und behält die lange Form. |
+| A8 | **Stufe ohne localStorage** | `session.ts` merkt die Menüwahl zusätzlich im Speicher (`setDifficulty`); `currentDifficulty() = Wettkampf ?? Wahl dieser Sitzung ?? gespeicherte Wahl`. |
 
 ## Folgeideen für die Roadmap
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createRng } from './cpu';
+import { DIFFICULTIES, type Difficulty } from './difficulty';
 import {
   DIVE,
   DIVES,
@@ -605,14 +606,17 @@ describe('Balancing', () => {
     expect(means[2]).toBeLessThan(DIVE.worldRecord);
   });
 
-  it('Computer-Gegner springen kaum Fehlsprünge – der Rookie wagt den 3½-Salto', () => {
-    const rng = createRng(8);
-    // Rookie NORMAL (7/s, Fehler 1,2) springt laut Spec 25p, 15s2, 35h: höherer Erwartungswert, mehr Risiko
-    const limits = [0.6, 0.3, 0.3];
-    DIVE_CPU_PROFILES.forEach((p, i) => {
-      const fails = Array.from({ length: 40 }, () => series(p, rng, cpuDiveRate(p, rng)).fails);
-      expect(avg(fails)).toBeLessThan(limits[i]);
-    });
+  it('Computer-Gegner: Fehlsprünge je Serie mit festen Grenzen je Stufe (LEICHT 0,7 / NORMAL 0,6 / SCHWER 0,3)', () => {
+    // Die Listen aus DIVE_CPU_DIVES wagen den 3½-Salto schon früh: höherer Erwartungswert, mehr Risiko.
+    // Gemessen (200 Serien): LEICHT 0,47/0,48/0,38, NORMAL 0,42/0,26/0,24, SCHWER 0,17/0,09/0,01
+    const limits: Record<Difficulty, number> = { easy: 0.7, normal: 0.6, hard: 0.3 };
+    for (const d of DIFFICULTIES) {
+      const rng = createRng(8);
+      for (const p of diveCpuProfiles(d)) {
+        const fails = avg(Array.from({ length: 40 }, () => series(p, rng, cpuDiveRate(p, rng)).fails));
+        expect([d, p.name, fails < limits[d]]).toEqual([d, p.name, true]);
+      }
+    }
   });
 
   it('8 Tipps/s (σ 80/60 ms) mit 15p, 25h, 15s2 erreicht Ø ≥ 140 und oft eine Medaille', () => {

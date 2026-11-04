@@ -332,7 +332,8 @@ export function vaultCpuProfiles(d: Difficulty): VaultCpuProfile[] {
 }
 
 // Reihenfolge Rookie/Profi/Champion – wird in competition.test.ts geprüft!
-export const VAULT_CPU_PROFILES: readonly VaultCpuProfile[] = vaultCpuProfiles('normal');
+// PURE: Das Spiel nutzt die Fabrik, so fallen die 120 Probesprünge beim Bauen weg
+export const VAULT_CPU_PROFILES: readonly VaultCpuProfile[] = /* @__PURE__ */ vaultCpuProfiles('normal');
 
 /** Ein Computer-Versuch – die Höhe hängt nicht von der Latte ab, also genau ein Sprung */
 export function cpuAttempt(profile: VaultCpuProfile, bar: number, rng: () => number): boolean {

@@ -1,7 +1,7 @@
 // Reine Spiellogik für das BMX-Rennen: Strecke, Fahrphysik, Tricks und
 // Wertung (Trickpunkte + Zeitbonus). Ohne Phaser, damit sie testbar ist.
 
-import { cpuField, type CpuSkill, type Difficulty } from './difficulty';
+import { clamp, cpuField, formFactor, type CpuSkill, type Difficulty } from './difficulty';
 import { tapSpeed, type Side } from './hurdles';
 
 export const BMX = {
@@ -443,8 +443,6 @@ export interface BmxCpuProfile {
   mistakeChance: number;
 }
 
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-
 /** BMX-Profil aus Tipprate und Fehlerfaktor */
 export function bmxCpuProfile({ rate, error: e }: CpuSkill, name: string): BmxCpuProfile {
   return {
@@ -483,7 +481,7 @@ export class BmxCpu {
     private readonly rng: () => number,
   ) {
     // Jede Fahrt ist etwas anders – auch Computer haben gute und schlechte Tage
-    this.rate = profile.tapRate * (0.95 + 0.1 * rng());
+    this.rate = profile.tapRate * formFactor(rng);
     this.nextTap = 0.15 + rng() * 0.15;
   }
 

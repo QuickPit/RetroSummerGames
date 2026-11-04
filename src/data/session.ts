@@ -19,7 +19,20 @@ export function endCompetition(): void {
   current = null;
 }
 
+// Menüwahl GEGNER auch im Speicher – sie muss ohne localStorage (privater Modus) halten
+let chosen: Difficulty | null = null;
+
+/** Merkt die Menüwahl für diese Sitzung; null = wieder die gespeicherte Wahl lesen */
+export function setDifficulty(d: Difficulty | null): void {
+  chosen = d;
+}
+
+/** Menüwahl GEGNER: in dieser Sitzung gewählt, sonst gespeichert, sonst NORMAL */
+export function menuDifficulty(): Difficulty {
+  return chosen ?? loadDifficulty();
+}
+
 /** Gegnerstärke: im Wettkampf die beim Start festgeschriebene, sonst die Menüwahl */
 export function currentDifficulty(): Difficulty {
-  return current?.difficulty ?? loadDifficulty();
+  return current?.difficulty ?? menuDifficulty();
 }

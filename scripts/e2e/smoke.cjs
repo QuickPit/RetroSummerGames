@@ -107,6 +107,7 @@ function botInPage(kind) {
       if (active('confirm') || window.__botPause) return;
       if (active('result')) {
         clearInterval(timer);
+        if (kind === 'long' && !mem.failed && !mem.validJumps) mem.failed = 'kein gültiger Versuch';
         resolve(mem.failed ? { ok: false, log: [...log, `✗ ${mem.failed}`] } : { ok: true, log });
         return;
       }
@@ -185,12 +186,24 @@ function botInPage(kind) {
         if (sc.verdictAt !== null) {
           if (mem.extended === 'logged') return;
           mem.extended = 'logged';
+          if (j.distance !== null) mem.validJumps = (mem.validJumps || 0) + 1;
           log.push(`Versuch: ${j.distance === null ? 'ungültig' : j.distance.toFixed(2) + ' m'}`);
           press('Enter');
           return;
         }
         if (j.phase === 'ready' || j.phase === 'runup') {
-          if (!mem.holding && j.phase === 'runup' && j.x >= -0.25) {
+          // Im Headless-Browser kommen Bilder und Bot-Takte unregelmäßig: die Position bis jetzt
+          // hochrechnen und so früh drücken, dass auch der nächste Takt noch vor dem Brett läge
+          const now = performance.now();
+          if (j.x !== mem.lastX) {
+            mem.lastX = j.x;
+            mem.movedAt = now;
+          }
+          const gap = Math.min(0.1, Math.max(0.016, (now - (mem.lastTick || now)) / 1000));
+          mem.tickGap = Math.max(gap, (mem.tickGap || 0.016) * 0.9);
+          mem.lastTick = now;
+          const x = j.x + (j.v * (now - mem.movedAt)) / 1000;
+          if (!mem.holding && j.phase === 'runup' && x + j.v * mem.tickGap * 1.5 >= -0.15) {
             mem.holding = true;
             send('keydown', 'Space');
             return;
@@ -473,6 +486,19 @@ async function checkEasyField(page, log) {
   if (rates.length !== 3 || rates.some((r) => r.profile > 7.35 || r.form > 7.35)) throw new Error(`Gegner zu schnell für LEICHT: ${JSON.stringify(rates)}`);
 }
 
+/** Unterzeile im Ergebnis: links frei für die Hallenuhr (Kasten bis x 150 bei 640 px Breite) */
+async function checkResultSubtitle(page) {
+  const sub = await page.evaluate(() => {
+    const t = window.__game.scene
+      .getScene('result')
+      .children.list.find((o) => o.type === 'Text' && o.text.includes('GEGNER:'));
+    return t ? { text: t.text, left: t.x - t.displayWidth * t.originX } : null;
+  });
+  if (!sub) throw new Error('Unterzeile mit GEGNER fehlt im Ergebnis');
+  if (sub.left < 160) throw new Error(`Unterzeile beginnt bei x ${sub.left} < 160: ${sub.text}`);
+  return sub;
+}
+
 async function checkEasy(page, log) {
   const texts = await page.evaluate(() =>
     window.__game.scene.getScene('result').children.list.filter((o) => o.type === 'Text').map((t) => t.text),
@@ -480,7 +506,8 @@ async function checkEasy(page, log) {
   const sub = texts.find((t) => t.includes('GEGNER:'));
   if (sub !== '110 M HÜRDEN – GEGNER: LEICHT') throw new Error(`Unterzeile im Ergebnis: ${sub}`);
   log.push(`Ergebnis: ${sub}`);
-  // Zurück ins Menü und wieder auf NORMAL stellen
+  // Zurück ins Menü und über die Tasten wieder auf NORMAL stellen (jede Seite hat zwar einen
+  // eigenen Browser-Kontext, aber so ist auch der Weg zurück geprüft)
   await page.keyboard.press('Escape');
   await waitTitle(page);
   await selectDifficultyRow(page);
@@ -538,6 +565,7 @@ async function runDiscipline(browser, kind) {
   }
   await page.waitForTimeout(1500);
   await page.screenshot({ path: path.join(OUT, `${kind}-result.png`) });
+  if (result.ok && !checkError) await checkResultSubtitle(page).catch((e) => (checkError = e));
   if (result.ok && !checkError && def.check) await def.check(page, log).catch((e) => (checkError = e));
   if (checkError) {
     log.push(`✗ ${checkError.message}`);
@@ -816,6 +844,8 @@ async function runCompetition(browser) {
       check(r.ok, `Bot ${bot} hat die Siegerehrung nicht erreicht`);
       await page.waitForTimeout(800);
       await shot(`${2 + i}-${bot}-result`);
+      const sub = await checkResultSubtitle(page);
+      log.push(`Unterzeile: ${sub.text} (ab x ${Math.round(sub.left)})`);
       if (scene === 'polevault') {
         // Nach dem Schnelldurchlauf hat der Champion eine gültige Höhe
         const pv = await page.evaluate(() => {

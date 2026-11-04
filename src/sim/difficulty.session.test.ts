@@ -2,7 +2,7 @@
 // auch wenn sich die gespeicherte Menüwahl später ändert (D7, Abnahmekriterium 4).
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { currentDifficulty, endCompetition, setCompetition } from '../data/session';
+import { currentDifficulty, endCompetition, menuDifficulty, setCompetition, setDifficulty } from '../data/session';
 import { createCompetition } from './competition';
 
 describe('currentDifficulty (QA)', () => {
@@ -10,6 +10,7 @@ describe('currentDifficulty (QA)', () => {
   const data = new Map<string, string>();
   afterEach(() => {
     endCompetition();
+    setDifficulty(null);
     data.clear();
     delete g.localStorage;
   });
@@ -44,5 +45,27 @@ describe('currentDifficulty (QA)', () => {
     data.set('rsg.difficulty', 'hard');
     setCompetition(createCompetition('GER', ['GER', 'FRA', 'ITA', 'ESP'], () => 0.3, 1));
     expect(currentDifficulty()).toBe('normal');
+  });
+
+  it('hält die Menüwahl auch ohne localStorage (privater Modus) im Speicher', () => {
+    expect(g.localStorage).toBeUndefined();
+    expect(currentDifficulty()).toBe('normal');
+    setDifficulty('easy');
+    expect(menuDifficulty()).toBe('easy');
+    expect(currentDifficulty()).toBe('easy');
+    // Der Wettkampf hat trotzdem Vorrang
+    setCompetition(createCompetition('GER', ['GER', 'FRA', 'ITA', 'ESP'], () => 0.3, 1, 'hard'));
+    expect(currentDifficulty()).toBe('hard');
+    endCompetition();
+    expect(currentDifficulty()).toBe('easy');
+  });
+
+  it('die Wahl dieser Sitzung geht vor einem anderen gespeicherten Wert', () => {
+    stub();
+    data.set('rsg.difficulty', 'hard');
+    setDifficulty('easy');
+    expect(currentDifficulty()).toBe('easy');
+    setDifficulty(null);
+    expect(currentDifficulty()).toBe('hard');
   });
 });
