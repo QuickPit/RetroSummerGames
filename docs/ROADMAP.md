@@ -83,6 +83,10 @@ Der `/sprint`-Ablauf nimmt immer den **obersten offenen** Punkt (`[ ]`), setzt i
 - [ ] **RSG-11 Gemeinsame Szenen-Bausteine**
   Doppelte Logik (Tastatur-Verwaltung, Fade, Ergebnis-Übergabe, Kamera, Board-Ablauf) in gemeinsame
   Helfer überführen – ohne Verhaltensänderung, Spieltest bleibt grün.
+  Aus dem Review von RSG-01a: Zuordnung Wettkampf-Feld → Gegner steht viermal in den Disziplinszenen
+  (Helfer `competitionOpponents(profiles)`); Esc/Rückfrage-Verdrahtung je Szene vereinheitlichen;
+  Dialog-Bausteine (`drawConfirmBox`, `drawChoiceMarker`, `drawInfoBox`) von `gfx/medalHud.ts` nach
+  `gfx/hud.ts` verschieben (für das Pause-Menü RSG-03). Publikumsgeräusch während der Rückfrage pausieren.
 
 - [ ] **RSG-15 Hilfekasten im Titel**
   Tasten- und Textspalte stehen fest (x126/x276): „LEERTASTE AM BRETT“ hat nur 6 px Luft, der
