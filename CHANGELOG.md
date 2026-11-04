@@ -3,6 +3,20 @@
 Was sich für Spieler ändert – neueste Version oben. Hier lässt sich auch ohne Rückfragen nachlesen,
 was das Agenten-Team umgesetzt und welche Entscheidungen es getroffen hat.
 
+## 0.9.0 – Turmspringen
+
+- Neue Disziplin Turmspringen vom 10-m-Turm in der Sprunghalle: Schwung holen durch Tippen, Absprung im Takt
+  der Arme, Leertaste halten zum Drehen und loslassen zum Öffnen, ↑ für Schrauben.
+- Acht Sprünge vom Kopfsprung bis zu 4½ Salti gehockt, drei Durchgänge, jeder Sprung nur einmal.
+- Fünf Kampfrichter mit Tafeln, Streichwertung × Schwierigkeitsgrad; nach jedem Sprung Urteil
+  (WELTKLASSE! … KLATSCHER!), Rechnung und ein Tipp. Am Turm erklärt ein Hinweis Absprung und Öffnen.
+- Der Wettkampf hat jetzt sechs Disziplinen (Turmspringen nach dem Schwimmen, BMX bleibt das Finale).
+- Fix: Nach einem Tab-Wechsel springt die Zeit beim Schwimmen und Turmspringen nicht mehr nach vorne.
+- Entscheidungen des Teams:
+  - Gegner springen nur auf der Anzeigetafel – so bleibt ein Durchgang bei unter einer Minute.
+  - Über 11 Tipps/s bringt schnelleres Tippen kaum mehr Schwung; entscheidend sind Absprung und Öffnen.
+  - Ein nicht geöffneter gehockter Sprung heißt „ARSCHBOMBE!“ (Ersatz „BOMBE!“ liegt bereit, falls das zu derb ist).
+
 ## 0.8.0 – 100 m Freistil
 
 - Neue Disziplin 100 m Freistil in einer eigenen Schwimmhalle: Startsprung mit Fehlstart-Regel, Kraulen im Takt

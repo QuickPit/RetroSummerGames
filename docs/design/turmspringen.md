@@ -384,3 +384,10 @@ Das Zeichen ½ ist in der Schrift vorhanden. Ist es in den Screenshots bei 8 px 
   - `gfx/diver.ts` mit allen Posen (siehe Szene) und den Spritzer-Stufen 0–3.
   - `gfx/diveHud.ts`: Takt-Skala, DREHUNG-Balken, `MIN`-Strich, Kampfrichter-Tafeln mit Streich-Markierung, Panel `DiveSelect`.
   - Prüfung über eine temporäre Galerie (`deviceScaleFactor: 3`), danach wieder löschen.
+
+## Abweichungen in der Umsetzung (v0.9.0)
+
+- Sim-Schnittstelle: `stepDive(s, dt)`, Eingaben mit Zeitstempel (`swingTap`, `takeoff`, `setHold`, `twist`), Phase `walk`.
+- Neuer Tipp `missedTakeoff` mit höchster Priorität nach automatischem Absprung; ab Basisnote 8 Tipps als „FEINSCHLIFF“.
+- Kopfzeile der Wertung ist ein Urteil (WELTKLASSE! … MISSGLÜCKT bzw. ARSCHBOMBE!/KLAPPMESSER!/KLATSCHER!/FEHLSPRUNG).
+- `bestLabel` BESTLEISTUNG; Hallentafel oben rechts, Wertung auf eigener Tafel; Halte-Hinweis am Turm bis zum ersten geöffneten Sprung.
