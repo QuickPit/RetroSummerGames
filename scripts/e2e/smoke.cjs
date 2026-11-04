@@ -475,14 +475,39 @@ async function runCompetition(browser) {
     const medals = final.table.reduce((n, r) => n + r.total, 0);
     check(medals > 0 && medals <= 12, `Unplausible Medaillenzahl ${medals}`);
 
+    // Endstand → Abschlussfeier: Podest wie im Spiegel, keine wachsende Objektzahl, ENTER führt ins Menü
+    await page.keyboard.press('Enter');
+    await waitActive('ceremony');
+    const ceremony = () =>
+      page.evaluate(() => {
+        const sc = window.__game.scene.getScene('ceremony');
+        return { podium: sc.podium, children: sc.children.length, elapsed: sc.elapsed };
+      });
+    await page.waitForTimeout(1000);
+    const c1 = await ceremony();
+    const expected = [];
+    for (const r of final.table) {
+      if (r.rank > 3 || r.total === 0) continue;
+      const grp = expected.find((p) => p.rank === r.rank);
+      if (grp) grp.codes.push(r.code);
+      else expected.push({ rank: r.rank, codes: [r.code] });
+    }
+    check(JSON.stringify(c1.podium) === JSON.stringify(expected), `Podest ${JSON.stringify(c1.podium)} ≠ Spiegel ${JSON.stringify(expected)}`);
+    log.push(`Abschlussfeier: Podest ${c1.podium.map((p) => `${p.rank}. ${p.codes.join('/')}`).join(', ') || 'leer'}`);
+    await page.waitForTimeout(2000);
+    await shot('6-ceremony');
+    const c2 = await ceremony();
+    check(c2.children === c1.children, `Objektzahl wächst in der Feier: ${c1.children} → ${c2.children}`);
+    check(c2.elapsed > c1.elapsed, 'Abschlussfeier läuft nicht');
     await page.keyboard.press('Enter');
     await waitActive('title');
+    check(!(await page.evaluate(() => window.__game.scene.isActive('ceremony'))), 'Abschlussfeier läuft nach ENTER weiter');
     const keys = await page.evaluate(() => Object.keys(localStorage));
     check(
       keys.every((k) => ['rsg.mode', 'rsg.country', 'rsg.look', 'rsg.event'].includes(k) || k.startsWith('rsg.best.')),
       `Unerwartete localStorage-Schlüssel: ${keys.join(', ')}`,
     );
-    log.push('Zurück im Menü');
+    log.push('Zurück im Menü (Wettkampf beendet)');
   } catch (e) {
     ok = false;
     log.push(`✗ ${e.message}`);

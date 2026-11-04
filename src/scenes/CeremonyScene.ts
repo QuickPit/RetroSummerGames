@@ -29,6 +29,8 @@ const STEP_H: Record<number, number> = { 1: 46, 2: 36, 3: 28 };
 const MAST_TOP: Record<number, number> = { 1: 56, 2: 74, 3: 88 };
 const MAST_BOTTOM = NIGHT.grassY + 4;
 const MAST_GAP = 48;
+/** Oberkante der Flaggen vor dem Hissen – über den Köpfen, damit man die Nationen sofort erkennt */
+const HOIST_FROM = 150;
 const ATHLETE_GAP = 30;
 const TOWERS = [
   { x: 26, top: 42 },
@@ -265,7 +267,7 @@ export class CeremonyScene extends Phaser.Scene {
       for (let s = 0; s < FLAG_W / SLICE; s++) {
         slices.push(
           this.add
-            .image(x + 3, MAST_BOTTOM, key)
+            .image(x + 3, HOIST_FROM, key)
             .setOrigin(0)
             .setCrop(s * SLICE, 0, SLICE, FLAG_H)
             .setDepth(-11),
@@ -395,7 +397,7 @@ export class CeremonyScene extends Phaser.Scene {
     masts.clear();
     const h = this.hoist();
     for (const m of this.masts) {
-      const flagTop = Math.round(MAST_BOTTOM - 26 - (MAST_BOTTOM - 26 - (m.top + 2)) * h);
+      const flagTop = Math.round(HOIST_FROM - (HOIST_FROM - (m.top + 2)) * h);
       drawFlagpole(masts, m.x, m.top, MAST_BOTTOM, flagTop);
       const n = m.slices.length;
       m.slices.forEach((img, s) => {
